@@ -1,6 +1,6 @@
 {
   "name": "@babel/cli",
-  "version": "7.15.7",
+  "version": "7.16.0",
   "description": "Babel command line.",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-cli",
@@ -40,8 +40,8 @@
     "@babel/core": "^7.0.0-0"
   },
   "devDependencies": {
-    "@babel/core": "workspace:*",
-    "@babel/helper-fixtures": "workspace:*",
+    "@babel/core": "workspace:^",
+    "@babel/helper-fixtures": "workspace:^",
     "rimraf": "^3.0.0"
   },
   "bin": {

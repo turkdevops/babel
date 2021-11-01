@@ -11,6 +11,7 @@ import {
   tokenIsTSDeclarationStart,
   tokenIsTSTypeOperator,
   tokenOperatorPrecedence,
+  tokenIsKeywordOrIdentifier,
   tt,
   type TokenType,
 } from "../../tokenizer/types";
@@ -41,6 +42,7 @@ import {
   type ErrorTemplate,
   ErrorCodes,
 } from "../../parser/error";
+import { cloneIdentifier } from "../../parser/node";
 
 type TsModifier =
   | "readonly"
@@ -135,6 +137,10 @@ const TSErrors = makeErrorTemplates(
       "Private elements cannot have an accessibility modifier ('%0').",
     ReadonlyForMethodSignature:
       "'readonly' modifier can only appear on a property declaration or index signature.",
+    ReservedArrowTypeParam:
+      "This syntax is reserved in files with the .mts or .cts extension. Add a trailing comma, as in `<T,>() => ...`.",
+    ReservedTypeAssertion:
+      "This syntax is reserved in files with the .mts or .cts extension. Use an `as` expression instead.",
     SetAccesorCannotHaveOptionalParameter:
       "A 'set' accessor cannot have an optional parameter.",
     SetAccesorCannotHaveRestParameter:
@@ -147,6 +153,10 @@ const TSErrors = makeErrorTemplates(
       "Type annotations must come before default assignments, e.g. instead of `age = 25: number` use `age: number = 25`.",
     TypeImportCannotSpecifyDefaultAndNamed:
       "A type-only import can specify a default import or named bindings, but not both.",
+    TypeModifierIsUsedInTypeExports:
+      "The 'type' modifier cannot be used on a named export when 'export type' is used on its export statement.",
+    TypeModifierIsUsedInTypeImports:
+      "The 'type' modifier cannot be used on a named import when 'import type' is used on its import statement.",
     UnexpectedParameterModifier:
       "A parameter property is only allowed in a constructor implementation.",
     UnexpectedReadonly:
@@ -359,12 +369,14 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     tsParseDelimitedList<T: N.Node>(
       kind: ParsingContext,
       parseElement: () => T,
+      refTrailingCommaPos?: { value: number },
     ): T[] {
       return nonNull(
         this.tsParseDelimitedListWorker(
           kind,
           parseElement,
           /* expectSuccess */ true,
+          refTrailingCommaPos,
         ),
       );
     }
@@ -377,13 +389,16 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       kind: ParsingContext,
       parseElement: () => ?T,
       expectSuccess: boolean,
+      refTrailingCommaPos?: { value: number },
     ): ?(T[]) {
       const result = [];
+      let trailingCommaPos = -1;
 
       for (;;) {
         if (this.tsIsListTerminator(kind)) {
           break;
         }
+        trailingCommaPos = -1;
 
         const element = parseElement();
         if (element == null) {
@@ -392,6 +407,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         result.push(element);
 
         if (this.eat(tt.comma)) {
+          trailingCommaPos = this.state.lastTokStart;
           continue;
         }
 
@@ -406,6 +422,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         return undefined;
       }
 
+      if (refTrailingCommaPos) {
+        refTrailingCommaPos.value = trailingCommaPos;
+      }
+
       return result;
     }
 
@@ -414,6 +434,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       parseElement: () => T,
       bracket: boolean,
       skipFirstToken: boolean,
+      refTrailingCommaPos?: { value: number },
     ): T[] {
       if (!skipFirstToken) {
         if (bracket) {
@@ -423,7 +444,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         }
       }
 
-      const result = this.tsParseDelimitedList(kind, parseElement);
+      const result = this.tsParseDelimitedList(
+        kind,
+        parseElement,
+        refTrailingCommaPos,
+      );
 
       if (bracket) {
         this.expect(tt.bracketR);
@@ -524,14 +549,20 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         this.unexpected();
       }
 
+      const refTrailingCommaPos = { value: -1 };
+
       node.params = this.tsParseBracketedList(
         "TypeParametersOrArguments",
         this.tsParseTypeParameter.bind(this),
         /* bracket */ false,
         /* skipFirstToken */ true,
+        refTrailingCommaPos,
       );
       if (node.params.length === 0) {
         this.raise(node.start, TSErrors.EmptyTypeParameters);
+      }
+      if (refTrailingCommaPos.value !== -1) {
+        this.addExtra(node, "trailingComma", refTrailingCommaPos.value);
       }
       return this.finishNode(node, "TSTypeParameterDeclaration");
     }
@@ -1403,6 +1434,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
     }
 
     tsParseTypeAssertion(): N.TsTypeAssertion {
+      if (this.getPluginOption("typescript", "disallowAmbiguousJSXLike")) {
+        this.raise(this.state.start, TSErrors.ReservedTypeAssertion);
+      }
+
       const node: N.TsTypeAssertion = this.startNode();
       const _const = this.tsTryNextParseConstantContext();
       node.typeAnnotation = _const || this.tsNextThenParseType();
@@ -2015,7 +2050,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       const bodilessType =
         type === "FunctionDeclaration"
           ? "TSDeclareFunction"
-          : type === "ClassMethod"
+          : type === "ClassMethod" || type === "ClassPrivateMethod"
           ? "TSDeclareMethod"
           : undefined;
       if (bodilessType && !this.match(tt.braceL) && this.isLineTerminator()) {
@@ -2755,6 +2790,17 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       super.pushClassPrivateMethod(classBody, method, isGenerator, isAsync);
     }
 
+    declareClassPrivateMethodInScope(
+      node: N.ClassPrivateMethod | N.EstreeMethodDefinition | N.TSDeclareMethod,
+      kind: number,
+    ) {
+      if (node.type === "TSDeclareMethod") return;
+      // This happens when using the "estree" plugin.
+      if (node.type === "MethodDefinition" && !node.value.body) return;
+
+      super.declareClassPrivateMethodInScope(node, kind);
+    }
+
     parseClassSuper(node: N.Class): void {
       super.parseClassSuper(node);
       if (node.superClass && this.isRelational("<")) {
@@ -2843,7 +2889,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
       // Either way, we're looking at a '<': tt.jsxTagStart or relational.
 
-      let typeParameters: N.TsTypeParameterDeclaration;
+      let typeParameters: ?N.TsTypeParameterDeclaration;
       state = state || this.state.clone();
 
       const arrow = this.tryParse(abort => {
@@ -2867,7 +2913,13 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       }, state);
 
       /*:: invariant(arrow.node != null) */
-      if (!arrow.error && !arrow.aborted) return arrow.node;
+      if (!arrow.error && !arrow.aborted) {
+        // This error is reported outside of the this.tryParse call so that
+        // in case of <T>(x) => 2, we don't consider <T>(x) as a type assertion
+        // because of this error.
+        if (typeParameters) this.reportReservedArrowTypeParam(typeParameters);
+        return arrow.node;
+      }
 
       if (!jsx) {
         // Try parsing a type cast instead of an arrow function.
@@ -2892,6 +2944,7 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       if (arrow.node) {
         /*:: invariant(arrow.failState) */
         this.state = arrow.failState;
+        if (typeParameters) this.reportReservedArrowTypeParam(typeParameters);
         return arrow.node;
       }
 
@@ -2906,6 +2959,16 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       if (typeCast?.thrown) throw typeCast.error;
 
       throw jsx?.error || arrow.error || typeCast?.error;
+    }
+
+    reportReservedArrowTypeParam(node: any) {
+      if (
+        node.params.length === 1 &&
+        !node.extra?.trailingComma &&
+        this.getPluginOption("typescript", "disallowAmbiguousJSXLike")
+      ) {
+        this.raise(node.start, TSErrors.ReservedArrowTypeParam);
+      }
     }
 
     // Handle type assertions
@@ -3310,5 +3373,131 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         this.state.isAmbientContext = true;
       }
       return super.getExpression();
+    }
+
+    parseExportSpecifier(
+      node: any,
+      isString: boolean,
+      isInTypeExport: boolean,
+      isMaybeTypeOnly: boolean,
+    ) {
+      if (!isString && isMaybeTypeOnly) {
+        this.parseTypeOnlyImportExportSpecifier(
+          node,
+          /* isImport */ false,
+          isInTypeExport,
+        );
+        return this.finishNode<N.ExportSpecifier>(node, "ExportSpecifier");
+      }
+      node.exportKind = "value";
+      return super.parseExportSpecifier(
+        node,
+        isString,
+        isInTypeExport,
+        isMaybeTypeOnly,
+      );
+    }
+
+    parseImportSpecifier(
+      specifier: any,
+      importedIsString: boolean,
+      isInTypeOnlyImport: boolean,
+      isMaybeTypeOnly: boolean,
+    ): N.ImportSpecifier {
+      if (!importedIsString && isMaybeTypeOnly) {
+        this.parseTypeOnlyImportExportSpecifier(
+          specifier,
+          /* isImport */ true,
+          isInTypeOnlyImport,
+        );
+        return this.finishNode<N.ImportSpecifier>(specifier, "ImportSpecifier");
+      }
+      specifier.importKind = "value";
+      return super.parseImportSpecifier(
+        specifier,
+        importedIsString,
+        isInTypeOnlyImport,
+        isMaybeTypeOnly,
+      );
+    }
+
+    parseTypeOnlyImportExportSpecifier(
+      node: any,
+      isImport: boolean,
+      isInTypeOnlyImportExport: boolean,
+    ): void {
+      const leftOfAsKey = isImport ? "imported" : "local";
+      const rightOfAsKey = isImport ? "local" : "exported";
+
+      let leftOfAs = node[leftOfAsKey];
+      let rightOfAs;
+
+      let hasTypeSpecifier = false;
+      let canParseAsKeyword = true;
+
+      const pos = leftOfAs.start;
+
+      // https://github.com/microsoft/TypeScript/blob/fc4f9d83d5939047aa6bb2a43965c6e9bbfbc35b/src/compiler/parser.ts#L7411-L7456
+      // import { type } from "mod";          - hasTypeSpecifier: false, leftOfAs: type
+      // import { type as } from "mod";       - hasTypeSpecifier: true,  leftOfAs: as
+      // import { type as as } from "mod";    - hasTypeSpecifier: false, leftOfAs: type, rightOfAs: as
+      // import { type as as as } from "mod"; - hasTypeSpecifier: true,  leftOfAs: as,   rightOfAs: as
+      if (this.isContextual(tt._as)) {
+        // { type as ...? }
+        const firstAs = this.parseIdentifier();
+        if (this.isContextual(tt._as)) {
+          // { type as as ...? }
+          const secondAs = this.parseIdentifier();
+          if (tokenIsKeywordOrIdentifier(this.state.type)) {
+            // { type as as something }
+            hasTypeSpecifier = true;
+            leftOfAs = firstAs;
+            rightOfAs = this.parseIdentifier();
+            canParseAsKeyword = false;
+          } else {
+            // { type as as }
+            rightOfAs = secondAs;
+            canParseAsKeyword = false;
+          }
+        } else if (tokenIsKeywordOrIdentifier(this.state.type)) {
+          // { type as something }
+          canParseAsKeyword = false;
+          rightOfAs = this.parseIdentifier();
+        } else {
+          // { type as }
+          hasTypeSpecifier = true;
+          leftOfAs = firstAs;
+        }
+      } else if (tokenIsKeywordOrIdentifier(this.state.type)) {
+        // { type something ...? }
+        hasTypeSpecifier = true;
+        leftOfAs = this.parseIdentifier();
+      }
+      if (hasTypeSpecifier && isInTypeOnlyImportExport) {
+        this.raise(
+          pos,
+          isImport
+            ? TSErrors.TypeModifierIsUsedInTypeImports
+            : TSErrors.TypeModifierIsUsedInTypeExports,
+        );
+      }
+
+      node[leftOfAsKey] = leftOfAs;
+      node[rightOfAsKey] = rightOfAs;
+
+      const kindKey = isImport ? "importKind" : "exportKind";
+      node[kindKey] = hasTypeSpecifier ? "type" : "value";
+
+      if (canParseAsKeyword && this.eatContextual(tt._as)) {
+        node[rightOfAsKey] = isImport
+          ? this.parseIdentifier()
+          : this.parseModuleExportName();
+      }
+      if (!node[rightOfAsKey]) {
+        node[rightOfAsKey] = cloneIdentifier(node[leftOfAsKey]);
+      }
+      if (isImport) {
+        this.checkLVal(node[rightOfAsKey], "import specifier", BIND_LEXICAL);
+      }
     }
   };

@@ -1,5 +1,5 @@
 FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = 1ad9bb7626a0836708ef4601668aa54af272e17d
+TEST262_COMMIT = ba82d46238bd16c3e31b93d21d2846c81a9ccf7a
 TYPESCRIPT_COMMIT = bbd9ff51f5fa5208b223bbb75a94e5e8184e3ffd
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
@@ -88,12 +88,12 @@ check-compat-data-ci:
 	$(MAKE) check-compat-data
 
 lint:
-	BABEL_ENV=test $(YARN) eslint scripts $(SOURCES) '*.{js,cjs,mjs,ts}' --format=codeframe --ext .js,.cjs,.mjs,.ts
+	BABEL_ENV=test $(YARN) eslint scripts benchmark $(SOURCES) '*.{js,cjs,mjs,ts}' --format=codeframe --ext .js,.cjs,.mjs,.ts
 
 fix: fix-json fix-js
 
 fix-js:
-	$(YARN) eslint scripts $(SOURCES) '*.{js,cjs,mjs,ts}' --format=codeframe --ext .js,.cjs,.mjs,.ts --fix
+	$(YARN) eslint scripts benchmark $(SOURCES) '*.{js,cjs,mjs,ts}' --format=codeframe --ext .js,.cjs,.mjs,.ts --fix
 
 fix-json:
 	$(YARN) prettier "{$(COMMA_SEPARATED_SOURCES)}/*/test/fixtures/**/options.json" --write --loglevel warn
@@ -186,17 +186,15 @@ prepublish:
 	IS_PUBLISH=true $(MAKE) test
 
 new-version-checklist:
-	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	@echo "!!!!!!                                                   !!!!!!"
-	@echo "!!!!!!  packages/babel-plugin-bugfix-safari-id-destructuring-collision-in-function-expression/src/index.ts"
-	@echo "!!!!!!  replace \"api.assertVersion()\" to the latest published version"
-	@echo "!!!!!!  packages/babel-preset-env/src/available-plugins.ts:"
-	@echo "!!!!!!  replace minVersion[\"bugfix/transform-v8-spread-parameters-in-optional-chaining\"] to the latest published version"
-	@echo "!!!!!!                                                   !!!!!!"
-	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	@exit 1
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!                                                   !!!!!!"
+	# @echo "!!!!!!         Write any message that should             !!!!!!"
+	# @echo "!!!!!!            block the release here                 !!!!!!"
+	# @echo "!!!!!!                                                   !!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @exit 1
 
 new-version:
 	$(MAKE) new-version-checklist

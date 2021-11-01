@@ -898,11 +898,14 @@ export type ImportDeclaration = NodeBase & {
   source: Literal,
 
   importKind?: "type" | "typeof" | "value", // TODO: Not in spec
+
+  assertions?: $ReadOnlyArray<ImportAttribute>,
 };
 
 export type ImportSpecifier = ModuleSpecifier & {
   type: "ImportSpecifier",
   imported: Identifier | StringLiteral,
+  importKind?: "type" | "value",
 };
 
 export type ImportDefaultSpecifier = ModuleSpecifier & {
@@ -930,6 +933,7 @@ export type ExportSpecifier = NodeBase & {
   type: "ExportSpecifier",
   exported: Identifier | StringLiteral,
   local: Identifier,
+  exportKind?: "type" | "value",
 };
 
 export type ExportDefaultSpecifier = NodeBase & {
@@ -950,6 +954,7 @@ export type ExportAllDeclaration = NodeBase & {
   type: "ExportAllDeclaration",
   source: Literal,
   exportKind?: "type" | "value", // TODO: Not in spec
+  assertions?: $ReadOnlyArray<ImportAttribute>,
 };
 
 // JSX (TODO: Not in spec)

@@ -1,6 +1,6 @@
 {
   "name": "@babel/helpers",
-  "version": "7.15.4",
+  "version": "7.16.0",
   "description": "Collection of helper functions used by Babel transforms.",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-helpers",
@@ -15,12 +15,12 @@
   },
   "main": "./lib/index.js",
   "dependencies": {
-    "@babel/template": "workspace:^7.15.4",
-    "@babel/traverse": "workspace:^7.15.4",
-    "@babel/types": "workspace:^7.15.4"
+    "@babel/template": "workspace:^",
+    "@babel/traverse": "workspace:^",
+    "@babel/types": "workspace:^"
   },
   "devDependencies": {
-    "@babel/helper-plugin-test-runner": "workspace:*"
+    "@babel/helper-plugin-test-runner": "workspace:^"
   },
   "engines": {
     "node": ">=6.9.0"

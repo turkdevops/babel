@@ -1,6 +1,6 @@
 {
   "name": "@babel/parser",
-  "version": "7.15.8",
+  "version": "7.16.0",
   "description": "A JavaScript parser",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-parser",
@@ -33,9 +33,9 @@
     "node": ">=6.0.0"
   },
   "devDependencies": {
-    "@babel/code-frame": "workspace:*",
-    "@babel/helper-fixtures": "workspace:*",
-    "@babel/helper-validator-identifier": "workspace:*",
+    "@babel/code-frame": "workspace:^",
+    "@babel/helper-fixtures": "workspace:^",
+    "@babel/helper-validator-identifier": "workspace:^",
     "charcodes": "^0.2.0"
   },
   "bin": "./bin/babel-parser.js"

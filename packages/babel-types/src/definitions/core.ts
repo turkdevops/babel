@@ -10,7 +10,8 @@ import {
   UPDATE_OPERATORS,
 } from "../constants";
 
-import defineType, {
+import {
+  defineAliasedType,
   assertShape,
   assertOptionalChainStart,
   assertValueType,
@@ -21,6 +22,8 @@ import defineType, {
   assertOneOf,
   validateOptional,
 } from "./utils";
+
+const defineType = defineAliasedType("Standardized");
 
 defineType("ArrayExpression", {
   fields: {
@@ -1546,6 +1549,11 @@ defineType("ExportSpecifier", {
     exported: {
       validate: assertNodeType("Identifier", "StringLiteral"),
     },
+    exportKind: {
+      // And TypeScript's "export { type foo } from"
+      validate: assertOneOf("type", "value"),
+      optional: true,
+    },
   },
 });
 
@@ -1663,7 +1671,8 @@ defineType("ImportSpecifier", {
     },
     importKind: {
       // Handle Flowtype's extension "import {typeof foo} from"
-      validate: assertOneOf("type", "typeof"),
+      // And TypeScript's "import { type foo } from"
+      validate: assertOneOf("type", "typeof", "value"),
       optional: true,
     },
   },
