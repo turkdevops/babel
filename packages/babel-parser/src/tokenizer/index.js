@@ -482,7 +482,7 @@ export default class Tokenizer extends ParserErrors {
   }
 
   // Called at the end of every token. Sets `end`, `val`, and
-  // maintains `context` and `exprAllowed`, and skips the space after
+  // maintains `context` and `canStartJSXElement`, and skips the space after
   // the token, so that the next one's `start` will point at the
   // right position.
 
@@ -496,6 +496,14 @@ export default class Tokenizer extends ParserErrors {
       this.state.endLoc = this.state.curPosition();
       this.updateContext(prevType);
     }
+  }
+
+  replaceToken(type: TokenType): void {
+    this.state.type = type;
+    // the prevType of updateContext is required
+    // only when the new type is tt.slash/tt.jsxTagEnd
+    // $FlowIgnore
+    this.updateContext();
   }
 
   // ### Token reading
@@ -727,18 +735,38 @@ export default class Tokenizer extends ParserErrors {
     }
   }
 
-  readToken_lt_gt(code: number): void {
-    // '<>'
-    const next = this.input.charCodeAt(this.state.pos + 1);
-    let size = 1;
+  readToken_lt(): void {
+    // '<'
+    const { pos } = this.state;
+    const next = this.input.charCodeAt(pos + 1);
 
-    if (next === code) {
-      size =
-        code === charCodes.greaterThan &&
-        this.input.charCodeAt(this.state.pos + 2) === charCodes.greaterThan
-          ? 3
-          : 2;
-      if (this.input.charCodeAt(this.state.pos + size) === charCodes.equalsTo) {
+    if (next === charCodes.lessThan) {
+      if (this.input.charCodeAt(pos + 2) === charCodes.equalsTo) {
+        this.finishOp(tt.assign, 3);
+        return;
+      }
+      this.finishOp(tt.bitShift, 2);
+      return;
+    }
+
+    if (next === charCodes.equalsTo) {
+      // <=
+      this.finishOp(tt.relational, 2);
+      return;
+    }
+
+    this.finishOp(tt.lt, 1);
+  }
+
+  readToken_gt(): void {
+    // '>'
+    const { pos } = this.state;
+    const next = this.input.charCodeAt(pos + 1);
+
+    if (next === charCodes.greaterThan) {
+      const size =
+        this.input.charCodeAt(pos + 2) === charCodes.greaterThan ? 3 : 2;
+      if (this.input.charCodeAt(pos + size) === charCodes.equalsTo) {
         this.finishOp(tt.assign, size + 1);
         return;
       }
@@ -748,10 +776,11 @@ export default class Tokenizer extends ParserErrors {
 
     if (next === charCodes.equalsTo) {
       // <= | >=
-      size = 2;
+      this.finishOp(tt.relational, 2);
+      return;
     }
 
-    this.finishOp(tt.relational, size);
+    this.finishOp(tt.gt, 1);
   }
 
   readToken_eq_excl(code: number): void {
@@ -963,8 +992,11 @@ export default class Tokenizer extends ParserErrors {
         return;
 
       case charCodes.lessThan:
+        this.readToken_lt();
+        return;
+
       case charCodes.greaterThan:
-        this.readToken_lt_gt(code);
+        this.readToken_gt();
         return;
 
       case charCodes.equalsTo:

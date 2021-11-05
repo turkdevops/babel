@@ -200,6 +200,8 @@ export const tt: { [name: string]: TokenType } = {
   bitwiseXOR: createBinop("^", 4),
   bitwiseAND: createBinop("&", 5),
   equality: createBinop("==/!=/===/!==", 6),
+  lt: createBinop("</>/<=/>=", 7),
+  gt: createBinop("</>/<=/>=", 7),
   relational: createBinop("</>/<=/>=", 7),
   bitShift: createBinop("<</>>/>>>", 8),
   plusMin: createToken("+/-", { beforeExpr, binop: 9, prefix, startsExpr }),
@@ -328,6 +330,12 @@ export const tt: { [name: string]: TokenType } = {
 
 export function tokenIsIdentifier(token: TokenType): boolean {
   return token >= tt._as && token <= tt.name;
+}
+
+export function tokenKeywordOrIdentifierIsKeyword(token: TokenType): boolean {
+  // we can remove the token >= tt._in check when we
+  // know a token is either keyword or identifier
+  return token <= tt._while;
 }
 
 export function tokenIsKeywordOrIdentifier(token: TokenType): boolean {
