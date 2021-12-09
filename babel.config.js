@@ -73,6 +73,12 @@ module.exports = function (api) {
     "eslint/*/test",
   ];
 
+  const lazyRequireSources = [
+    "./packages/babel-cli",
+    "./packages/babel-core",
+    "./packages/babel-preset-env/src/available-plugins.js",
+  ];
+
   switch (env) {
     // Configs used during bundling builds.
     case "standalone":
@@ -165,9 +171,6 @@ module.exports = function (api) {
       ["@babel/proposal-object-rest-spread", { useBuiltIns: true }],
 
       convertESM ? "@babel/proposal-export-namespace-from" : null,
-      convertESM
-        ? ["@babel/transform-modules-commonjs", { importInterop }]
-        : null,
       convertESM ? pluginImportMetaUrl : null,
 
       pluginPackageJsonMacro,
@@ -195,17 +198,6 @@ module.exports = function (api) {
         plugins: ["babel-plugin-transform-charcodes"],
       },
       convertESM && {
-        test: [
-          "./packages/babel-cli",
-          "./packages/babel-core",
-          "./packages/babel-preset-env/src/available-plugins.js",
-        ].map(normalize),
-        plugins: [
-          // Explicitly use the lazy version of CommonJS modules.
-          ["@babel/transform-modules-commonjs", { importInterop, lazy: true }],
-        ],
-      },
-      convertESM && {
         test: ["./packages/babel-node/src"].map(normalize),
         // Used to conditionally import kexec
         plugins: ["@babel/plugin-proposal-dynamic-import"],
@@ -214,6 +206,35 @@ module.exports = function (api) {
         test: sources.map(normalize),
         assumptions: sourceAssumptions,
         plugins: [transformNamedBabelTypesImportToDestructuring],
+      },
+      convertESM && {
+        test: lazyRequireSources.map(normalize),
+        plugins: [
+          // Explicitly use the lazy version of CommonJS modules.
+          [
+            "@babel/transform-modules-commonjs",
+            { importInterop: importInteropSrc, lazy: true },
+          ],
+        ],
+      },
+      convertESM && {
+        test: sources.map(normalize),
+        exclude: lazyRequireSources.map(normalize),
+        plugins: [
+          [
+            "@babel/transform-modules-commonjs",
+            { importInterop: importInteropSrc },
+          ],
+        ],
+      },
+      {
+        test: sources.map(source => normalize(source.replace("/src", "/test"))),
+        plugins: [
+          [
+            "@babel/transform-modules-commonjs",
+            { importInterop: importInteropTest },
+          ],
+        ],
       },
       {
         test: unambiguousSources.map(normalize),
@@ -244,7 +265,7 @@ const monorepoPackages = ["codemods", "eslint", "packages"]
   .reduce((a, b) => a.concat(b))
   .map(name => name.replace(/^babel-/, "@babel/"));
 
-function importInterop(source) {
+function importInteropSrc(source) {
   if (
     // These internal files are "real CJS" (whose default export is
     // on module.exports) and not compiled ESM.
@@ -264,6 +285,22 @@ function importInterop(source) {
 
   // For external modules, we want to match the Node.js behavior
   return "node";
+}
+
+function importInteropTest(source) {
+  // This file will soon have an esm entrypoint
+  if (source === "@babel/helper-plugin-test-runner") {
+    return "none";
+  }
+  if (
+    // non-test files
+    !source.startsWith(".") ||
+    // lib files
+    /(?:\.\.\/)+(?:babel-[a-z-]+\/)?lib/.test(source)
+  ) {
+    return "node";
+  }
+  return "babel";
 }
 
 // env vars from the cli are always strings, so !!ENV_VAR returns true for "false"

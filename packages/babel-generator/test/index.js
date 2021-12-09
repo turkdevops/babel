@@ -1,5 +1,3 @@
-import Printer from "../lib/printer";
-import generate, { CodeGenerator } from "../lib";
 import { parse } from "@babel/parser";
 import * as t from "@babel/types";
 import fs from "fs";
@@ -7,6 +5,11 @@ import path from "path";
 import fixtures from "@babel/helper-fixtures";
 import sourcemap from "source-map";
 import { fileURLToPath } from "url";
+
+import _Printer from "../lib/printer.js";
+import _generate, { CodeGenerator } from "../lib/index.js";
+const Printer = _Printer.default;
+const generate = _generate.default;
 
 describe("generation", function () {
   it("completeness", function () {
@@ -494,6 +497,17 @@ describe("programmatic generation", function () {
     expect(output).toBe("interface A {}");
   });
 
+  it("flow function type annotation with no parent", () => {
+    const functionTypeAnnotation = t.functionTypeAnnotation(
+      null,
+      [],
+      null,
+      t.voidTypeAnnotation(),
+    );
+    const output = generate(functionTypeAnnotation).code;
+    expect(output).toBe("() => void");
+  });
+
   describe("directives", function () {
     it("preserves escapes", function () {
       const directive = t.directive(
@@ -795,7 +809,7 @@ describe("CodeGenerator", function () {
   });
 });
 
-const suites = fixtures(
+const suites = fixtures.default(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures"),
 );
 

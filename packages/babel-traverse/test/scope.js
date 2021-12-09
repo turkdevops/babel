@@ -1,8 +1,10 @@
-import traverse, { NodePath } from "../lib";
 import { parse } from "@babel/parser";
 import * as t from "@babel/types";
 
-function getPath(code, options): NodePath<t.Program> {
+import _traverse, { NodePath } from "../lib/index.js";
+const traverse = _traverse.default;
+
+function getPath(code, options) {
   const ast =
     typeof code === "string" ? parse(code, options) : createNode(code);
   let path;
@@ -650,6 +652,18 @@ describe("scope", () => {
         ];
 
         expect(() => getPath(ast)).not.toThrow();
+      });
+    });
+
+    describe("duplicate declaration", () => {
+      it("should not throw error on duplicate class and function declaration", () => {
+        const ast = [
+          t.classDeclaration(t.identifier("A"), t.super(), t.classBody([]), []),
+          t.functionDeclaration(t.identifier("A"), [], t.blockStatement([])),
+        ];
+
+        ast[0].declare = true;
+        expect(() => getPath(ast)).not.toThrowError();
       });
     });
 

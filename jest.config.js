@@ -1,6 +1,9 @@
 const supportsESM = parseInt(process.versions.node) >= 12;
+const isPublishBundle = process.env.IS_PUBLISH;
 
 module.exports = {
+  runner: supportsESM ? "./test/jest-light-runner" : "jest-runner",
+
   collectCoverageFrom: [
     "packages/*/src/**/*.{js,mjs,ts}",
     "codemods/*/src/**/*.{js,mjs,ts}",
@@ -23,6 +26,9 @@ module.exports = {
     "<rootDir>/build/",
     "<rootDir>/.history/", // local directory for VSCode Extension - https://marketplace.visualstudio.com/items?itemName=xyz.local-history
     "_browser\\.js",
+    // Some tests require internal files of bundled packages, which are not available
+    // in production builds. They are marked using the .skip-bundled.js extension.
+    ...(isPublishBundle ? ["\\.skip-bundled\\.js$"] : []),
   ],
   testEnvironment: "node",
   setupFilesAfterEnv: ["<rootDir>/test/testSetupFile.js"],
@@ -43,7 +49,6 @@ module.exports = {
     "/test/__data__/",
     "<rootDir>/build/",
   ],
-  resolver: supportsESM ? "./test/jestExportsMapResolver.cjs" : null,
   // We don't need module name mappers here as depedencies of workspace
   // package should be declared explicitly in the package.json
   // Yarn will generate correct file links so that Jest can resolve correctly

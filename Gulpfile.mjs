@@ -61,7 +61,7 @@ function mapSrcToLib(srcPath) {
 function mapToDts(packageName) {
   return packageName.replace(
     /(?<=\\|\/|^)(packages|eslint|codemods)(?=\\|\/)/,
-    "dts"
+    "dts/$1"
   );
 }
 
@@ -461,6 +461,7 @@ function copyDts(packages) {
 
 const libBundles = [
   "packages/babel-parser",
+  "packages/babel-plugin-proposal-object-rest-spread",
   "packages/babel-plugin-proposal-optional-chaining",
   "packages/babel-preset-react",
   "packages/babel-preset-typescript",

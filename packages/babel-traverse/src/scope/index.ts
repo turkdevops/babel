@@ -706,6 +706,7 @@ export default class Scope {
         this.registerBinding(path.node.kind, declar);
       }
     } else if (path.isClassDeclaration()) {
+      if (path.node.declare) return;
       this.registerBinding("let", path);
     } else if (path.isImportDeclaration()) {
       const specifiers = path.get("specifiers");
@@ -983,7 +984,7 @@ export default class Scope {
     init?: t.Expression;
     unique?: boolean;
     _blockHoist?: number | undefined;
-    kind?: "var" | "let";
+    kind?: "var" | "let" | "const";
   }) {
     let path = this.path;
 
@@ -1091,7 +1092,7 @@ export default class Scope {
    * Walks the scope tree and gathers all declarations of `kind`.
    */
 
-  getAllBindingsOfKind(...kinds: string[]): any {
+  getAllBindingsOfKind(...kinds: string[]): Record<string, Binding> {
     const ids = Object.create(null);
 
     for (const kind of kinds) {

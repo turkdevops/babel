@@ -1,5 +1,5 @@
 FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = 26f1f4567ee7e33163d961c867d689173cbb9065
+TEST262_COMMIT = 46f165ae490de7f1343165ab8d228db81eaa02c5
 TYPESCRIPT_COMMIT = bbd9ff51f5fa5208b223bbb75a94e5e8184e3ffd
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
@@ -18,7 +18,7 @@ NODE := $(YARN) node
 
 .PHONY: build build-dist watch lint fix clean test-clean test-only test test-ci publish bootstrap
 
-build: build-bundle
+build: build-no-bundle
 ifneq ("$(BABEL_COVERAGE)", "true")
 	$(MAKE) build-standalone
 endif
@@ -28,8 +28,15 @@ build-bundle: clean clean-lib
 	$(MAKE) build-flow-typings
 	$(MAKE) build-dist
 
-build-bundle-ci: bootstrap-only
-	$(MAKE) build-bundle
+build-no-bundle-ci: bootstrap-only
+	$(YARN) gulp build-dev
+	$(MAKE) build-flow-typings
+	$(MAKE) build-dist
+
+build-no-bundle: clean clean-lib
+	BABEL_ENV=development $(YARN) gulp build-dev
+	$(MAKE) build-flow-typings
+	$(MAKE) build-dist
 
 generate-tsconfig:
 	$(NODE) scripts/generators/tsconfig.js
@@ -46,7 +53,7 @@ build-typescript-legacy-typings:
 
 build-standalone: build-babel-standalone
 
-build-standalone-ci: build-bundle-ci
+build-standalone-ci: build-no-bundle-ci
 	$(MAKE) build-standalone
 
 build-babel-standalone:
@@ -60,12 +67,6 @@ build-dist: build-plugin-transform-runtime-dist
 build-plugin-transform-runtime-dist:
 	cd packages/babel-plugin-transform-runtime; \
 	$(NODE) scripts/build-dist.js
-
-build-no-bundle: clean clean-lib
-	BABEL_ENV=development $(YARN) gulp build-dev
-	# Ensure that build artifacts for types are created during local
-	# development too.
-	$(MAKE) build-flow-typings
 
 watch: build-no-bundle
 	BABEL_ENV=development $(YARN) gulp watch
