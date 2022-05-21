@@ -29,6 +29,7 @@ type Test = {
   // todo(flow->ts): improve types here
   sourceMappings;
   sourceMap;
+  sourceMapFile: TestFile;
 };
 
 type Suite = {
@@ -105,6 +106,7 @@ function pushTask(taskName, taskDir, suite, suiteName) {
 
   const expectLoc =
     findFile(taskDir + "/output", true /* allowJSON */) ||
+    findFile(`${taskDir}/output.extended`, true) ||
     taskDir + "/output.js";
   const stdoutLoc = taskDir + "/stdout.txt";
   const stderrLoc = taskDir + "/stderr.txt";
@@ -130,6 +132,7 @@ function pushTask(taskName, taskDir, suite, suiteName) {
   if (taskOptsLoc) Object.assign(taskOpts, require(taskOptsLoc));
 
   const test = {
+    taskDir,
     optionsDir: taskOptsLoc ? path.dirname(taskOptsLoc) : null,
     title: humanize(taskName, true),
     disabled:
@@ -163,6 +166,7 @@ function pushTask(taskName, taskDir, suite, suiteName) {
     },
     sourceMappings: undefined,
     sourceMap: undefined,
+    sourceMapFile: undefined,
     inputSourceMap: undefined,
   };
 
@@ -223,6 +227,11 @@ function pushTask(taskName, taskDir, suite, suiteName) {
   const sourceMapLoc = taskDir + "/source-map.json";
   if (fs.existsSync(sourceMapLoc)) {
     test.sourceMap = JSON.parse(readFile(sourceMapLoc));
+    test.sourceMapFile = {
+      loc: sourceMapLoc,
+      code: test.sourceMap,
+      filename: "",
+    };
   }
 
   const inputMapLoc = taskDir + "/input-source-map.json";
@@ -298,7 +307,8 @@ function wrapPackagesArray(type, names, optionsDir) {
 
       const monorepoPath = path.join(
         path.dirname(fileURLToPath(import.meta.url)),
-        "../..",
+        "../../..",
+        name.startsWith("codemod") ? "codemods" : "packages",
         `babel-${type}-${name}`,
       );
 

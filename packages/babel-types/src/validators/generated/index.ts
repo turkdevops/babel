@@ -1399,6 +1399,23 @@ export function isClassProperty(
 
   return false;
 }
+export function isClassAccessorProperty(
+  node: object | null | undefined,
+  opts?: object | null,
+): node is t.ClassAccessorProperty {
+  if (!node) return false;
+
+  const nodeType = (node as t.Node).type;
+  if (nodeType === "ClassAccessorProperty") {
+    if (typeof opts === "undefined") {
+      return true;
+    } else {
+      return shallowEqual(node, opts);
+    }
+  }
+
+  return false;
+}
 export function isClassPrivateProperty(
   node: object | null | undefined,
   opts?: object | null,
@@ -3915,6 +3932,23 @@ export function isTSTypeAliasDeclaration(
 
   return false;
 }
+export function isTSInstantiationExpression(
+  node: object | null | undefined,
+  opts?: object | null,
+): node is t.TSInstantiationExpression {
+  if (!node) return false;
+
+  const nodeType = (node as t.Node).type;
+  if (nodeType === "TSInstantiationExpression") {
+    if (typeof opts === "undefined") {
+      return true;
+    } else {
+      return shallowEqual(node, opts);
+    }
+  }
+
+  return false;
+}
 export function isTSAsExpression(
   node: object | null | undefined,
   opts?: object | null,
@@ -4277,6 +4311,7 @@ export function isStandardized(
     "OptionalMemberExpression" === nodeType ||
     "OptionalCallExpression" === nodeType ||
     "ClassProperty" === nodeType ||
+    "ClassAccessorProperty" === nodeType ||
     "ClassPrivateProperty" === nodeType ||
     "ClassPrivateMethod" === nodeType ||
     "PrivateName" === nodeType ||
@@ -4350,6 +4385,7 @@ export function isExpression(
     "PipelineTopicExpression" === nodeType ||
     "PipelineBareFunction" === nodeType ||
     "PipelinePrimaryTopicReference" === nodeType ||
+    "TSInstantiationExpression" === nodeType ||
     "TSAsExpression" === nodeType ||
     "TSTypeAssertion" === nodeType ||
     "TSNonNullExpression" === nodeType ||
@@ -4852,6 +4888,9 @@ export function isPatternLike(
     "AssignmentPattern" === nodeType ||
     "ArrayPattern" === nodeType ||
     "ObjectPattern" === nodeType ||
+    "TSAsExpression" === nodeType ||
+    "TSTypeAssertion" === nodeType ||
+    "TSNonNullExpression" === nodeType ||
     (nodeType === "Placeholder" &&
       ("Pattern" === (node as t.Placeholder).expectedNode ||
         "Identifier" === (node as t.Placeholder).expectedNode))
@@ -4880,6 +4919,9 @@ export function isLVal(
     "ArrayPattern" === nodeType ||
     "ObjectPattern" === nodeType ||
     "TSParameterProperty" === nodeType ||
+    "TSAsExpression" === nodeType ||
+    "TSTypeAssertion" === nodeType ||
+    "TSNonNullExpression" === nodeType ||
     (nodeType === "Placeholder" &&
       ("Pattern" === (node as t.Placeholder).expectedNode ||
         "Identifier" === (node as t.Placeholder).expectedNode))
@@ -5052,6 +5094,7 @@ export function isProperty(
   if (
     "ObjectProperty" === nodeType ||
     "ClassProperty" === nodeType ||
+    "ClassAccessorProperty" === nodeType ||
     "ClassPrivateProperty" === nodeType
   ) {
     if (typeof opts === "undefined") {
@@ -5178,6 +5221,23 @@ export function isModuleSpecifier(
     "ExportNamespaceSpecifier" === nodeType ||
     "ExportDefaultSpecifier" === nodeType
   ) {
+    if (typeof opts === "undefined") {
+      return true;
+    } else {
+      return shallowEqual(node, opts);
+    }
+  }
+
+  return false;
+}
+export function isAccessor(
+  node: object | null | undefined,
+  opts?: object | null,
+): node is t.Accessor {
+  if (!node) return false;
+
+  const nodeType = (node as t.Node).type;
+  if ("ClassAccessorProperty" === nodeType) {
     if (typeof opts === "undefined") {
       return true;
     } else {
@@ -5564,6 +5624,7 @@ export function isTypeScript(
     "TSInterfaceDeclaration" === nodeType ||
     "TSInterfaceBody" === nodeType ||
     "TSTypeAliasDeclaration" === nodeType ||
+    "TSInstantiationExpression" === nodeType ||
     "TSAsExpression" === nodeType ||
     "TSTypeAssertion" === nodeType ||
     "TSEnumDeclaration" === nodeType ||

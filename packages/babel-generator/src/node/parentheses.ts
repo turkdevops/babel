@@ -5,6 +5,7 @@ import {
   isAwaitExpression,
   isBinary,
   isBinaryExpression,
+  isUpdateExpression,
   isCallExpression,
   isClassDeclaration,
   isClassExpression,
@@ -17,6 +18,7 @@ import {
   isForInStatement,
   isForOfStatement,
   isForStatement,
+  isFunctionExpression,
   isIfStatement,
   isIndexedAccessType,
   isIntersectionTypeAnnotation,
@@ -32,6 +34,7 @@ import {
   isSwitchStatement,
   isTSArrayType,
   isTSAsExpression,
+  isTSInstantiationExpression,
   isTSIntersectionType,
   isTSNonNullExpression,
   isTSOptionalType,
@@ -217,6 +220,19 @@ export function TSInferType(node: any, parent: any): boolean {
   return isTSArrayType(parent) || isTSOptionalType(parent);
 }
 
+export function TSInstantiationExpression(
+  node: t.TSInstantiationExpression,
+  parent: t.Node,
+) {
+  return (
+    (isCallExpression(parent) ||
+      isOptionalCallExpression(parent) ||
+      isNewExpression(parent) ||
+      isTSInstantiationExpression(parent)) &&
+    !!parent.typeParameters
+  );
+}
+
 export function BinaryExpression(node: any, parent: any): boolean {
   // let i = (1 in []);
   // for ((1 in []);;);
@@ -344,6 +360,16 @@ export function Identifier(
   parent: t.Node,
   printStack: Array<t.Node>,
 ): boolean {
+  // 13.15.2 AssignmentExpression RS: Evaluation
+  // (fn) = function () {};
+  if (
+    node.extra?.parenthesized &&
+    isAssignmentExpression(parent, { left: node }) &&
+    (isFunctionExpression(parent.right) || isClassExpression(parent.right)) &&
+    parent.right.id == null
+  ) {
+    return true;
+  }
   // Non-strict code allows the identifier `let`, but it cannot occur as-is in
   // certain contexts to avoid ambiguity with contextual keyword `let`.
   if (node.name === "let") {
@@ -414,6 +440,7 @@ function isFirstInContext(
     if (
       (hasPostfixPart(node, parent) && !isNewExpression(parent)) ||
       (isSequenceExpression(parent) && parent.expressions[0] === node) ||
+      (isUpdateExpression(parent) && !parent.prefix) ||
       isConditional(parent, { test: node }) ||
       isBinary(parent, { left: node }) ||
       isAssignmentExpression(parent, { left: node })

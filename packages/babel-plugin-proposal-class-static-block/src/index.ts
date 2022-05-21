@@ -7,7 +7,6 @@ import {
 } from "@babel/helper-create-class-features-plugin";
 
 import type * as t from "@babel/types";
-import type { NodePath } from "@babel/traverse";
 /**
  * Generate a uid that is not in `denyList`
  *
@@ -43,7 +42,7 @@ export default declare(({ types: t, template, assertVersion }) => {
       // Run on ClassBody and not on class so that if @babel/helper-create-class-features-plugin
       // is enabled it can generte optimized output without passing from the intermediate
       // private fields representation.
-      ClassBody(classBody: NodePath<t.ClassBody>) {
+      ClassBody(classBody) {
         const { scope } = classBody;
         const privateNames = new Set<string>();
         const body = classBody.get("body");
@@ -59,12 +58,21 @@ export default declare(({ types: t, template, assertVersion }) => {
           const staticBlockRef = t.privateName(
             t.identifier(staticBlockPrivateId),
           );
+
+          let replacement;
+          const blockBody = path.node.body;
+          // We special-case the single expression case to avoid the iife, since
+          // it's common.
+          if (blockBody.length === 1 && t.isExpressionStatement(blockBody[0])) {
+            replacement = (blockBody[0] as t.ExpressionStatement).expression;
+          } else {
+            replacement = template.expression.ast`(() => { ${blockBody} })()`;
+          }
+
           path.replaceWith(
             t.classPrivateProperty(
               staticBlockRef,
-              template.expression.ast`(() => { ${
-                (path.node as t.StaticBlock).body
-              } })()`,
+              replacement,
               [],
               /* static */ true,
             ),

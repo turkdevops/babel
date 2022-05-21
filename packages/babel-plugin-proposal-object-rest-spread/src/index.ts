@@ -2,7 +2,7 @@ import { declare } from "@babel/helper-plugin-utils";
 import syntaxObjectRestSpread from "@babel/plugin-syntax-object-rest-spread";
 import { types as t } from "@babel/core";
 import type { PluginPass } from "@babel/core";
-import type { NodePath, Visitor, Scope } from "@babel/traverse";
+import type { NodePath, Scope } from "@babel/traverse";
 import { convertFunctionParams } from "@babel/plugin-transform-parameters";
 import { isRequired } from "@babel/helper-compilation-targets";
 import compatData from "@babel/compat-data/corejs2-built-ins";
@@ -20,7 +20,12 @@ if (!process.env.BABEL_8_BREAKING) {
   var ZERO_REFS = t.isReferenced(node, property, pattern) ? 1 : 0;
 }
 
-export default declare((api, opts) => {
+export interface Options {
+  useBuiltIns?: boolean;
+  loose?: boolean;
+}
+
+export default declare((api, opts: Options) => {
   api.assertVersion(7);
 
   const targets = api.targets();
@@ -122,6 +127,7 @@ export default declare((api, opts) => {
           ),
         );
       } else {
+        // @ts-expect-error private name has been handled by destructuring-private
         keys.push(t.cloneNode(prop.key));
         allLiteral = false;
       }
@@ -138,7 +144,8 @@ export default declare((api, opts) => {
   ) {
     const impureComputedPropertyDeclarators: t.VariableDeclarator[] = [];
     for (const propPath of properties) {
-      const key = propPath.get("key");
+      // PrivateName is handled in destructuring-private plugin
+      const key = propPath.get("key") as NodePath<t.Expression>;
       if (propPath.node.computed && !key.isPure()) {
         const name = scope.generateUidBasedOnNode(key.node);
         const declarator = t.variableDeclarator(t.identifier(name), key.node);
@@ -675,6 +682,6 @@ export default declare((api, opts) => {
 
         path.replaceWith(exp);
       },
-    } as Visitor<PluginPass>,
+    },
   };
 });

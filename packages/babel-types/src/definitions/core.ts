@@ -66,6 +66,9 @@ defineType("AssignmentExpression", {
             "MemberExpression",
             "ArrayPattern",
             "ObjectPattern",
+            "TSAsExpression",
+            "TSTypeAssertion",
+            "TSNonNullExpression",
           ),
     },
     right: {
@@ -319,6 +322,9 @@ defineType("ForInStatement", {
             "MemberExpression",
             "ArrayPattern",
             "ObjectPattern",
+            "TSAsExpression",
+            "TSTypeAssertion",
+            "TSNonNullExpression",
           ),
     },
     right: {
@@ -407,6 +413,10 @@ defineType("FunctionDeclaration", {
     body: {
       validate: assertNodeType("BlockStatement"),
     },
+    predicate: {
+      validate: assertNodeType("DeclaredPredicate", "InferredPredicate"),
+      optional: true,
+    },
   },
   aliases: [
     "Scopable",
@@ -449,6 +459,10 @@ defineType("FunctionExpression", {
     },
     body: {
       validate: assertNodeType("BlockStatement"),
+    },
+    predicate: {
+      validate: assertNodeType("DeclaredPredicate", "InferredPredicate"),
+      optional: true,
     },
   },
 });
@@ -819,6 +833,9 @@ defineType("ObjectProperty", {
           "Identifier",
           "StringLiteral",
           "NumericLiteral",
+          "BigIntLiteral",
+          "DecimalLiteral",
+          "PrivateName",
         );
         const computed = assertNodeType("Expression");
 
@@ -832,6 +849,9 @@ defineType("ObjectProperty", {
           "Identifier",
           "StringLiteral",
           "NumericLiteral",
+          "BigIntLiteral",
+          "DecimalLiteral",
+          "PrivateName",
         ];
         return validator;
       })(),
@@ -879,7 +899,13 @@ defineType("ObjectProperty", {
   visitor: ["key", "value", "decorators"],
   aliases: ["UserWhitespacable", "Property", "ObjectMember"],
   validate: (function () {
-    const pattern = assertNodeType("Identifier", "Pattern");
+    const pattern = assertNodeType(
+      "Identifier",
+      "Pattern",
+      "TSAsExpression",
+      "TSNonNullExpression",
+      "TSTypeAssertion",
+    );
     const expression = assertNodeType("Expression");
 
     return function (parent, key, node) {
@@ -906,6 +932,9 @@ defineType("RestElement", {
             "ArrayPattern",
             "ObjectPattern",
             "MemberExpression",
+            "TSAsExpression",
+            "TSTypeAssertion",
+            "TSNonNullExpression",
           ),
     },
     // For Flow
@@ -1183,6 +1212,9 @@ defineType("AssignmentPattern", {
         "ObjectPattern",
         "ArrayPattern",
         "MemberExpression",
+        "TSAsExpression",
+        "TSTypeAssertion",
+        "TSNonNullExpression",
       ),
     },
     right: {
@@ -1247,6 +1279,10 @@ defineType("ArrowFunctionExpression", {
     body: {
       validate: assertNodeType("BlockStatement", "Expression"),
     },
+    predicate: {
+      validate: assertNodeType("DeclaredPredicate", "InferredPredicate"),
+      optional: true,
+    },
   },
 });
 
@@ -1262,8 +1298,10 @@ defineType("ClassBody", {
             "ClassPrivateMethod",
             "ClassProperty",
             "ClassPrivateProperty",
+            "ClassAccessorProperty",
             "TSDeclareMethod",
             "TSIndexSignature",
+            "StaticBlock",
           ),
         ),
       ),
@@ -1581,6 +1619,9 @@ defineType("ForOfStatement", {
           "MemberExpression",
           "ArrayPattern",
           "ObjectPattern",
+          "TSAsExpression",
+          "TSTypeAssertion",
+          "TSNonNullExpression",
         );
 
         return function (node, key, val) {
@@ -2090,6 +2131,80 @@ defineType("ClassProperty", {
   aliases: ["Property"],
   fields: {
     ...classMethodOrPropertyCommon,
+    value: {
+      validate: assertNodeType("Expression"),
+      optional: true,
+    },
+    definite: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+    typeAnnotation: {
+      validate: process.env.BABEL_8_BREAKING
+        ? assertNodeType("TypeAnnotation", "TSTypeAnnotation")
+        : assertNodeType("TypeAnnotation", "TSTypeAnnotation", "Noop"),
+      optional: true,
+    },
+    decorators: {
+      validate: chain(
+        assertValueType("array"),
+        assertEach(assertNodeType("Decorator")),
+      ),
+      optional: true,
+    },
+    readonly: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+    declare: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+    variance: {
+      validate: assertNodeType("Variance"),
+      optional: true,
+    },
+  },
+});
+
+defineType("ClassAccessorProperty", {
+  visitor: ["key", "value", "typeAnnotation", "decorators"],
+  builder: [
+    "key",
+    "value",
+    "typeAnnotation",
+    "decorators",
+    "computed",
+    "static",
+  ],
+  aliases: ["Property", "Accessor"],
+  fields: {
+    ...classMethodOrPropertyCommon,
+    key: {
+      validate: chain(
+        (function () {
+          const normal = assertNodeType(
+            "Identifier",
+            "StringLiteral",
+            "NumericLiteral",
+            "PrivateName",
+          );
+          const computed = assertNodeType("Expression");
+
+          return function (node: any, key: string, val: any) {
+            const validator = node.computed ? computed : normal;
+            validator(node, key, val);
+          };
+        })(),
+        assertNodeType(
+          "Identifier",
+          "StringLiteral",
+          "NumericLiteral",
+          "Expression",
+          "PrivateName",
+        ),
+      ),
+    },
     value: {
       validate: assertNodeType("Expression"),
       optional: true,

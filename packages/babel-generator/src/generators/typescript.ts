@@ -12,15 +12,29 @@ export function TSTypeAnnotation(this: Printer, node: t.TSTypeAnnotation) {
 export function TSTypeParameterInstantiation(
   this: Printer,
   node: t.TSTypeParameterInstantiation,
+  parent: t.Node,
 ): void {
   this.token("<");
   this.printList(node.params, node, {});
+  if (parent.type === "ArrowFunctionExpression" && node.params.length === 1) {
+    this.token(",");
+  }
   this.token(">");
 }
 
 export { TSTypeParameterInstantiation as TSTypeParameterDeclaration };
 
 export function TSTypeParameter(this: Printer, node: t.TSTypeParameter) {
+  if (node.in) {
+    this.word("in");
+    this.space();
+  }
+
+  if (node.out) {
+    this.word("out");
+    this.space();
+  }
+
   this.word(
     !process.env.BABEL_8_BREAKING
       ? (node.name as unknown as string)
@@ -221,7 +235,10 @@ export function tsPrintFunctionOrConstructorType(
   // todo: missing type FunctionOrConstructorType
   node: any,
 ) {
-  const { typeParameters, parameters } = node;
+  const { typeParameters } = node;
+  const parameters = process.env.BABEL_8_BREAKING
+    ? node.params
+    : node.parameters;
   this.print(typeParameters, node);
   this.token("(");
   this._parameters(parameters, node);
@@ -229,7 +246,10 @@ export function tsPrintFunctionOrConstructorType(
   this.space();
   this.token("=>");
   this.space();
-  this.print(node.typeAnnotation.typeAnnotation, node);
+  const returnType = process.env.BABEL_8_BREAKING
+    ? node.returnType
+    : node.typeAnnotation;
+  this.print(returnType.typeAnnotation, node);
 }
 
 export function TSTypeReference(this: Printer, node: t.TSTypeReference) {
@@ -255,6 +275,10 @@ export function TSTypeQuery(this: Printer, node: t.TSTypeQuery) {
   this.word("typeof");
   this.space();
   this.print(node.exprName);
+
+  if (node.typeParameters) {
+    this.print(node.typeParameters, node);
+  }
 }
 
 export function TSTypeLiteral(this: Printer, node: t.TSTypeLiteral) {
@@ -504,6 +528,14 @@ export function TSTypeAssertion(this: Printer, node: t.TSTypeAssertion) {
   this.print(expression, node);
 }
 
+export function TSInstantiationExpression(
+  this: Printer,
+  node: t.TSInstantiationExpression,
+) {
+  this.print(node.expression, node);
+  this.print(node.typeParameters, node);
+}
+
 export function TSEnumDeclaration(this: Printer, node: t.TSEnumDeclaration) {
   const { declare, const: isConst, id, members } = node;
   if (declare) {
@@ -644,12 +676,18 @@ export function TSNamespaceExportDeclaration(
 }
 
 export function tsPrintSignatureDeclarationBase(this: Printer, node: any) {
-  const { typeParameters, parameters } = node;
+  const { typeParameters } = node;
+  const parameters = process.env.BABEL_8_BREAKING
+    ? node.params
+    : node.parameters;
   this.print(typeParameters, node);
   this.token("(");
   this._parameters(parameters, node);
   this.token(")");
-  this.print(node.typeAnnotation, node);
+  const returnType = process.env.BABEL_8_BREAKING
+    ? node.returnType
+    : node.typeAnnotation;
+  this.print(returnType, node);
 }
 
 export function tsPrintClassMemberModifiers(this: Printer, node: any, isField) {

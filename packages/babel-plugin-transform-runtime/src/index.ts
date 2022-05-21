@@ -18,7 +18,16 @@ function supportsStaticESM(caller) {
   return !!caller?.supportsStaticESM;
 }
 
-export default declare((api, options, dirname) => {
+export interface Options {
+  absoluteRuntime?: boolean;
+  corejs?: string | number | { version: string | number; proposals?: boolean };
+  helpers?: boolean;
+  regenerator?: boolean;
+  useESModules?: boolean | "auto";
+  version?: string;
+}
+
+export default declare((api, options: Options, dirname) => {
   api.assertVersion(7);
 
   const {
@@ -85,19 +94,21 @@ export default declare((api, options, dirname) => {
     throw new Error(`The 'version' option must be a version string.`);
   }
 
-  // In recent @babel/runtime versions, we can use require("helper").default
-  // instead of require("helper") so that it has the same interface as the
-  // ESM helper, and bundlers can better exchange one format for the other.
-  // TODO(Babel 8): Remove this check, it's always true
-  const DUAL_MODE_RUNTIME = "7.13.0";
-  const supportsCJSDefault = hasMinVersion(DUAL_MODE_RUNTIME, runtimeVersion);
+  if (!process.env.BABEL_8_BREAKING) {
+    // In recent @babel/runtime versions, we can use require("helper").default
+    // instead of require("helper") so that it has the same interface as the
+    // ESM helper, and bundlers can better exchange one format for the other.
+    const DUAL_MODE_RUNTIME = "7.13.0";
+    // eslint-disable-next-line no-var
+    var supportsCJSDefault = hasMinVersion(DUAL_MODE_RUNTIME, runtimeVersion);
+  }
 
   function has(obj, key) {
     return Object.prototype.hasOwnProperty.call(obj, key);
   }
 
   if (has(options, "useBuiltIns")) {
-    if (options.useBuiltIns) {
+    if (options["useBuiltIns"]) {
       throw new Error(
         "The 'useBuiltIns' option has been removed. The @babel/runtime " +
           "module now uses builtins by default.",
@@ -111,7 +122,7 @@ export default declare((api, options, dirname) => {
   }
 
   if (has(options, "polyfill")) {
-    if (options.polyfill === false) {
+    if (options["polyfill"] === false) {
       throw new Error(
         "The 'polyfill' option has been removed. The @babel/runtime " +
           "module now skips polyfilling by default.",
@@ -158,6 +169,7 @@ export default declare((api, options, dirname) => {
     };
   }
 
+  // TODO: Remove this in Babel 8
   function createRegeneratorPlugin(options) {
     if (!useRuntimeRegenerator) return undefined;
     return (api, _, filename) => {
@@ -215,10 +227,22 @@ export default declare((api, options, dirname) => {
         // If the helper didn't exist yet at the version given, we bail
         // out and let Babel either insert it directly, or throw an error
         // so that plugins can handle that case properly.
-        if (
-          file.availableHelper &&
-          !file.availableHelper(name, runtimeVersion)
-        ) {
+        if (!file.availableHelper?.(name, runtimeVersion)) {
+          if (name === "regeneratorRuntime") {
+            // For regeneratorRuntime, we can fallback to the old behavior of
+            // relying on the regeneratorRuntime global. If the 'regenerator'
+            // option is not disabled, babel-plugin-polyfill-regenerator will
+            // then replace it with a @babel/helpers/regeneratorRuntime import.
+            //
+            // We must wrap it in a function, because built-in Babel helpers
+            // are functions.
+            //
+            // TODO: Remove this in Babel 8.
+            return t.arrowFunctionExpression(
+              [],
+              t.identifier("regeneratorRuntime"),
+            );
+          }
           return;
         }
 
@@ -260,8 +284,13 @@ export default declare((api, options, dirname) => {
           cached = t.cloneNode(cached);
         } else {
           cached = addDefault(file.path, source, {
-            importedInterop:
-              isHelper && supportsCJSDefault ? "compiled" : "uncompiled",
+            importedInterop: (
+              process.env.BABEL_8_BREAKING
+                ? isHelper
+                : isHelper && supportsCJSDefault
+            )
+              ? "compiled"
+              : "uncompiled",
             nameHint,
             blockHoist,
           });

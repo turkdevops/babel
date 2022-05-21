@@ -1,6 +1,9 @@
 // @flow
 
-import type { ErrorTemplate, raiseFunction } from "../parser/error";
+import { Errors, type ParseErrorConstructor } from "../parse-error";
+import { Position } from "./location";
+import type { Node } from "../types";
+import Tokenizer from "../tokenizer";
 
 /*:: declare var invariant; */
 /**
@@ -16,8 +19,8 @@ ExpressionScope is used to track declaration errors in these ambiguous patterns:
    e.g. we don't know if `async({ x })` is a call expression or an async arrow
    function parameters until we see an `=>` after `)`
 
-The following declaration errors (@see parser/error-message) will be recorded in
-some expression scopes and thrown later when we know what the ambigous pattern is
+The following declaration errors (@see parser-errors/standard) will be recorded in
+some expression scopes and thrown later when we know what the ambiguous pattern is
 
 - AwaitBindingIdentifier
 - AwaitExpressionFormalParameter
@@ -73,27 +76,45 @@ class ExpressionScope {
   }
 }
 
+type ArrowHeadParsingParameterInitializerError =
+  | typeof Errors.AwaitExpressionFormalParameter
+  | typeof Errors.YieldInParameter;
+
+type ArrowHeadParsingDeclarationError =
+  | ArrowHeadParsingParameterInitializerError
+  | typeof Errors.InvalidParenthesizedAssignment
+  | typeof Errors.AwaitBindingIdentifier;
+
 class ArrowHeadParsingScope extends ExpressionScope {
-  errors: Map</* pos */ number, /* message */ ErrorTemplate> = new Map();
+  declarationErrors: Map<number, [ParseErrorConstructor<{||}>, Position]> =
+    new Map();
   constructor(type: 1 | 2) {
     super(type);
   }
-  recordDeclarationError(pos: number, template: ErrorTemplate) {
-    this.errors.set(pos, template);
+  recordDeclarationError(
+    ParsingErrorClass: ParseErrorConstructor<{||}>,
+    { at }: { at: Position },
+  ) {
+    const index = at.index;
+
+    this.declarationErrors.set(index, [ParsingErrorClass, at]);
   }
-  clearDeclarationError(pos: number) {
-    this.errors.delete(pos);
+  clearDeclarationError(index: number) {
+    this.declarationErrors.delete(index);
   }
-  iterateErrors(iterator: (template: ErrorTemplate, pos: number) => void) {
-    this.errors.forEach(iterator);
+  iterateErrors(
+    iterator: ([ArrowHeadParsingDeclarationError, Position]) => void,
+  ) {
+    this.declarationErrors.forEach(iterator);
   }
 }
 
 export default class ExpressionScopeHandler {
+  parser: Tokenizer;
   stack: Array<ExpressionScope> = [new ExpressionScope()];
-  declare raise: raiseFunction;
-  constructor(raise: raiseFunction) {
-    this.raise = raise;
+
+  constructor(parser: Tokenizer) {
+    this.parser = parser;
   }
   enter(scope: ExpressionScope) {
     this.stack.push(scope);
@@ -113,14 +134,18 @@ export default class ExpressionScopeHandler {
    * @param {ErrorTemplate} template Error template
    * @memberof ExpressionScopeHandler
    */
-  recordParameterInitializerError(pos: number, template: ErrorTemplate): void {
+  recordParameterInitializerError(
+    toParseError: ArrowHeadParsingParameterInitializerError,
+    { at: node }: { at: Node },
+  ): void {
+    const origin = { at: node.loc.start };
     const { stack } = this;
     let i = stack.length - 1;
     let scope: ExpressionScope = stack[i];
     while (!scope.isCertainlyParameterDeclaration()) {
       if (scope.canBeArrowParameterDeclaration()) {
         /*:: invariant(scope instanceof ArrowHeadParsingScope) */
-        scope.recordDeclarationError(pos, template);
+        scope.recordDeclarationError(toParseError, origin);
       } else {
         /*:: invariant(scope.type == kExpression) */
         // Type-Expression is the boundary where initializer error can populate to
@@ -128,14 +153,15 @@ export default class ExpressionScopeHandler {
       }
       scope = stack[--i];
     }
-    /* eslint-disable @babel/development-internal/dry-error-messages */
-    this.raise(pos, template);
+    this.parser.raise(toParseError, origin);
   }
 
   /**
-   * Record parenthesized identifier errors
+   * Record errors that must be thrown if the current pattern ends up being an arrow
+   * function parameter. This is used to record parenthesized identifiers, and to record
+   * "a as T" and "<T> a" type assertions when parsing typescript.
    *
-   * A parenthesized identifier in LHS can be ambiguous because the assignment
+   * A parenthesized identifier (or type assertion) in LHS can be ambiguous because the assignment
    * can be transformed to an assignable later, but not vice versa:
    * For example, in `([(a) = []] = []) => {}`, we think `(a) = []` is an LHS in `[(a) = []]`,
    * an LHS within `[(a) = []] = []`. However the LHS chain is then transformed by toAssignable,
@@ -148,22 +174,23 @@ export default class ExpressionScopeHandler {
    * For example, in `( x = ( [(a) = []] = [] ) ) => {}`, we should not record `(a)` in `( x = ... ) =>`
    * arrow scope because when we finish parsing `( [(a) = []] = [] )`, it is an unambiguous assignment
    * expression and can not be cast to pattern
-   * @param {number} pos
-   * @param {ErrorTemplate} template
+   * @param {ParseErrorConstructor<{||}>} error
+   * @param {Node} payload.at
    * @returns {void}
    * @memberof ExpressionScopeHandler
    */
-  recordParenthesizedIdentifierError(
-    pos: number,
-    template: ErrorTemplate,
+  recordArrowParemeterBindingError(
+    error: ParseErrorConstructor<{||}>,
+    { at: node }: { at: Node },
   ): void {
     const { stack } = this;
     const scope: ExpressionScope = stack[stack.length - 1];
+    const origin = { at: node.loc.start };
     if (scope.isCertainlyParameterDeclaration()) {
-      this.raise(pos, template);
+      this.parser.raise(error, origin);
     } else if (scope.canBeArrowParameterDeclaration()) {
       /*:: invariant(scope instanceof ArrowHeadParsingScope) */
-      scope.recordDeclarationError(pos, template);
+      scope.recordDeclarationError(error, origin);
     } else {
       return;
     }
@@ -178,14 +205,14 @@ export default class ExpressionScopeHandler {
    * @param {ErrorTemplate} template
    * @memberof ExpressionScopeHandler
    */
-  recordAsyncArrowParametersError(pos: number, template: ErrorTemplate): void {
+  recordAsyncArrowParametersError({ at }: { at: Position }): void {
     const { stack } = this;
     let i = stack.length - 1;
     let scope: ExpressionScope = stack[i];
     while (scope.canBeArrowParameterDeclaration()) {
       if (scope.type === kMaybeAsyncArrowParameterDeclaration) {
         /*:: invariant(scope instanceof ArrowHeadParsingScope) */
-        scope.recordDeclarationError(pos, template);
+        scope.recordDeclarationError(Errors.AwaitBindingIdentifier, { at });
       }
       scope = stack[--i];
     }
@@ -196,15 +223,14 @@ export default class ExpressionScopeHandler {
     const currentScope = stack[stack.length - 1];
     if (!currentScope.canBeArrowParameterDeclaration()) return;
     /*:: invariant(currentScope instanceof ArrowHeadParsingScope) */
-    currentScope.iterateErrors((template, pos) => {
-      /* eslint-disable @babel/development-internal/dry-error-messages */
-      this.raise(pos, template);
+    currentScope.iterateErrors(([toParseError, loc]) => {
+      this.parser.raise(toParseError, { at: loc });
       // iterate from parent scope
       let i = stack.length - 2;
       let scope = stack[i];
       while (scope.canBeArrowParameterDeclaration()) {
         /*:: invariant(scope instanceof ArrowHeadParsingScope) */
-        scope.clearDeclarationError(pos);
+        scope.clearDeclarationError(loc.index);
         scope = stack[--i];
       }
     });

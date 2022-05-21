@@ -1,7 +1,18 @@
 import { declare } from "@babel/helper-plugin-utils";
 import { types as t, template } from "@babel/core";
+import type { Visitor, Scope } from "@babel/traverse";
 
-export default declare((api, options) => {
+export interface Options {
+  allowMutablePropsOnTags?: null | string[];
+}
+
+interface VisitorState {
+  isImmutable: boolean;
+  mutablePropsAllowed: boolean;
+  jsxScope: Scope;
+  targetScope: Scope;
+}
+export default declare((api, options: Options) => {
   api.assertVersion(7);
 
   const { allowMutablePropsOnTags } = options;
@@ -41,17 +52,18 @@ export default declare((api, options) => {
     return scope;
   }
 
-  const analyzer = {
+  const immutabilityVisitor: Visitor<VisitorState> = {
     enter(path, state) {
       const stop = () => {
         state.isImmutable = false;
         path.stop();
       };
 
-      if (path.isJSXClosingElement()) {
+      const skip = () => {
         path.skip();
-        return;
-      }
+      };
+
+      if (path.isJSXClosingElement()) return skip();
 
       // Elements with refs are not safe to hoist.
       if (
@@ -61,53 +73,69 @@ export default declare((api, options) => {
         return stop();
       }
 
-      // Ignore identifiers & JSX expressions.
+      // Ignore JSX expressions and immutable values.
       if (
         path.isJSXIdentifier() ||
         path.isJSXMemberExpression() ||
-        path.isJSXNamespacedName()
+        path.isJSXNamespacedName() ||
+        path.isImmutable()
       ) {
         return;
       }
 
+      // Ignore constant bindings.
       if (path.isIdentifier()) {
         const binding = path.scope.getBinding(path.node.name);
         if (binding && binding.constant) return;
       }
 
-      if (!path.isImmutable()) {
-        // If it's not immutable, it may still be a pure expression, such as string concatenation.
-        // It is still safe to hoist that, so long as its result is immutable.
-        // If not, it is not safe to replace as mutable values (like objects) could be mutated after render.
-        // https://github.com/facebook/react/issues/3226
-        if (path.isPure()) {
-          const expressionResult = path.evaluate();
-          if (expressionResult.confident) {
-            // We know the result; check its mutability.
-            const { value } = expressionResult;
-            const isMutable =
-              (!state.mutablePropsAllowed &&
-                value &&
-                typeof value === "object") ||
-              typeof value === "function";
-            if (!isMutable) {
-              // It evaluated to an immutable value, so we can hoist it.
-              path.skip();
-              return;
-            }
-          } else if (t.isIdentifier(expressionResult.deopt)) {
-            // It's safe to hoist here if the deopt reason is an identifier (e.g. func param).
-            // The hoister will take care of how high up it can be hoisted.
-            return;
-          }
-        }
-        stop();
+      // If we allow mutable props, tags with function expressions can be
+      // safely hoisted.
+      const { mutablePropsAllowed } = state;
+      if (mutablePropsAllowed && path.isFunction()) {
+        path.traverse(targetScopeVisitor, state);
+        return skip();
       }
-    },
 
+      if (!path.isPure()) return stop();
+
+      // If it's not immutable, it may still be a pure expression, such as string concatenation.
+      // It is still safe to hoist that, so long as its result is immutable.
+      // If not, it is not safe to replace as mutable values (like objects) could be mutated after render.
+      // https://github.com/facebook/react/issues/3226
+      const expressionResult = path.evaluate();
+      if (expressionResult.confident) {
+        // We know the result; check its mutability.
+        const { value } = expressionResult;
+        if (
+          mutablePropsAllowed ||
+          value === null ||
+          (typeof value !== "object" && typeof value !== "function")
+        ) {
+          // It evaluated to an immutable value, so we can hoist it.
+          return skip();
+        }
+      } else if (t.isIdentifier(expressionResult.deopt)) {
+        // It's safe to hoist here if the deopt reason is an identifier (e.g. func param).
+        // The hoister will take care of how high up it can be hoisted.
+        return;
+      }
+
+      stop();
+    },
+  };
+
+  const targetScopeVisitor: Visitor<VisitorState> = {
     ReferencedIdentifier(path, state) {
       const { node } = path;
       let { scope } = path;
+
+      while (scope !== state.jsxScope) {
+        // If a binding is declared in an inner function, it doesn't affect hoisting.
+        if (declares(node, scope)) return;
+
+        scope = scope.parent;
+      }
 
       while (scope) {
         // We cannot hoist outside of the previous hoisting target
@@ -124,71 +152,12 @@ export default declare((api, options) => {
 
       state.targetScope = getHoistingScope(scope);
     },
-
-    /*
-    See the discussion at https://github.com/babel/babel/pull/12967#discussion_r587948958
-    to uncomment this code.
-
-    ReferencedIdentifier(path, state) {
-      const { node } = path;
-      let { scope } = path;
-      let targetScope;
-
-      let isNestedScope = true;
-      let needsHoisting = true;
-
-      while (scope) {
-        // We cannot hoist outside of the previous hoisting target
-        // scope, so we return early and we don't update it.
-        if (scope === state.targetScope) return;
-
-        // When we hit the scope of our JSX element, we must start
-        // checking if they declare the binding of the current
-        // ReferencedIdentifier.
-        // We don't case about bindings declared in nested scopes,
-        // because the whole nested scope is hoisted alongside the
-        // JSX element so it doesn't impose any extra constraint.
-        if (scope === state.jsxScope) {
-          isNestedScope = false;
-        }
-
-        // If we are in an upper scope and hoisting to this scope has
-        // any benefit, we update the possible targetScope to the
-        // current one.
-        if (!isNestedScope && needsHoisting) {
-          targetScope = scope;
-        }
-
-        // When we start walking in upper scopes, avoid hoisting JSX
-        // elements until we hit a scope introduced by a function or
-        // loop.
-        // This is because hoisting from the inside to the outside
-        // of block or if statements doesn't give any performance
-        // benefit, and it just unnecessarily increases the code size.
-        if (scope === state.jsxScope) {
-          needsHoisting = false;
-        }
-        if (!needsHoisting && isHoistingScope(scope)) {
-          needsHoisting = true;
-        }
-
-        // If the current scope declares the ReferencedIdentifier we
-        // are checking, we break out of this loop. There are two
-        // possible scenarios:
-        //  1. We are in a nested scope, this this declaration means
-        //     that this reference doesn't affect the target scope.
-        //     The targetScope variable is still undefined.
-        //  2. We are in an upper scope, so this declaration defines
-        //     a new hoisting constraint. The targetScope variable
-        //     refers to the current scope.
-        if (declares(node, scope)) break;
-
-        scope = scope.parent;
-      }
-
-      if (targetScope) state.targetScope = targetScope;
-    },*/
   };
+
+  // We cannot use traverse.visitors.merge because it doesn't support
+  // immutabilityVisitor's bare `enter` visitor.
+  // It's safe to just use ... because the two visitors don't share any key.
+  const hoistingVisitor = { ...immutabilityVisitor, ...targetScopeVisitor };
 
   return {
     name: "transform-react-constant-elements",
@@ -213,23 +182,9 @@ export default declare((api, options) => {
           }
 
           const elementName = lastSegment.name;
+          // @ts-expect-error Fixme: allowMutablePropsOnTags should handle JSXNamespacedName
           mutablePropsAllowed = allowMutablePropsOnTags.includes(elementName);
         }
-
-        const state = {
-          isImmutable: true,
-          mutablePropsAllowed,
-          targetScope: path.scope.getProgramParent(),
-        };
-
-        // Traverse all props passed to this element for immutability,
-        // and compute the target hoisting scope
-        path.traverse(analyzer, state);
-
-        if (!state.isImmutable) return;
-
-        const { targetScope } = state;
-        HOISTED.set(path.node, targetScope);
 
         // In order to avoid hoisting unnecessarily, we need to know which is
         // the scope containing the current JSX element. If a parent of the
@@ -238,13 +193,38 @@ export default declare((api, options) => {
         let jsxScope;
         let current = path;
         while (!jsxScope && current.parentPath.isJSX()) {
+          // @ts-ignore current is a search pointer
           current = current.parentPath;
           jsxScope = HOISTED.get(current.node);
         }
-        jsxScope ??= getHoistingScope(path.scope);
+        jsxScope ??= path.scope;
+
+        const visitorState: VisitorState = {
+          isImmutable: true,
+          mutablePropsAllowed,
+          jsxScope,
+          targetScope: path.scope.getProgramParent(),
+        };
+        path.traverse(hoistingVisitor, visitorState);
+        if (!visitorState.isImmutable) return;
+
+        const { targetScope } = visitorState;
+        HOISTED.set(path.node, targetScope);
 
         // Only hoist if it would give us an advantage.
-        if (targetScope === jsxScope) return;
+        for (let currentScope = jsxScope; ; ) {
+          if (targetScope === currentScope) return;
+          if (isHoistingScope(currentScope)) break;
+
+          currentScope = currentScope.parent;
+          if (!currentScope) {
+            throw new Error(
+              "Internal @babel/plugin-transform-react-constant-elements error: " +
+                "targetScope must be an ancestor of jsxScope. " +
+                "This is a Babel bug, please report it.",
+            );
+          }
+        }
 
         const id = path.scope.generateUidBasedOnNode(name);
         targetScope.push({ id: t.identifier(id) });

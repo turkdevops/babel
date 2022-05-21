@@ -147,7 +147,7 @@ const es2020 = {
 };
 
 const es2021 = {
-  "proposal-numeric-separator": "numeric separator",
+  "proposal-numeric-separator": "numeric separators",
   "proposal-logical-assignment-operators": "Logical Assignment",
 };
 
@@ -157,10 +157,12 @@ const es2022 = {
     "Ergonomic brand checks for private fields",
   "proposal-class-properties": {
     features: [
-      "static class fields",
-      "instance class fields, public instance class fields",
-      "instance class fields, private instance class fields basic support",
-      "instance class fields, computed instance class fields",
+      "static class fields / public static class fields",
+      "static class fields / private static class fields",
+      "static class fields / computed static class fields",
+      "instance class fields / public instance class fields",
+      "instance class fields / private instance class fields basic support",
+      "instance class fields / computed instance class fields",
     ],
   },
   "proposal-private-methods": "private class methods",

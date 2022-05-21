@@ -1,6 +1,6 @@
 {
   "name": "@babel/preset-env",
-  "version": "7.16.4",
+  "version": "7.18.0",
   "description": "A Babel preset for each environment.",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-preset-env",
@@ -42,6 +42,7 @@
     "@babel/plugin-syntax-class-static-block": "^7.14.5",
     "@babel/plugin-syntax-dynamic-import": "^7.8.3",
     "@babel/plugin-syntax-export-namespace-from": "^7.8.3",
+    "@babel/plugin-syntax-import-assertions": "workspace:^",
     "@babel/plugin-syntax-json-strings": "^7.8.3",
     "@babel/plugin-syntax-logical-assignment-operators": "^7.10.4",
     "@babel/plugin-syntax-nullish-coalescing-operator": "^7.8.3",
@@ -86,9 +87,9 @@
     "@babel/preset-modules": "^0.1.5",
     "@babel/types": "workspace:^",
     "babel-plugin-polyfill-corejs2": "^0.3.0",
-    "babel-plugin-polyfill-corejs3": "^0.4.0",
+    "babel-plugin-polyfill-corejs3": "^0.5.0",
     "babel-plugin-polyfill-regenerator": "^0.3.0",
-    "core-js-compat": "^3.19.1",
+    "core-js-compat": "^3.22.1",
     "semver": "condition:BABEL_8_BREAKING ? ^7.3.4 : ^6.3.0"
   },
   "peerDependencies": {
@@ -102,5 +103,17 @@
   },
   "engines": {
     "node": ">=6.9.0"
+  },
+  "conditions": {
+    "BABEL_8_BREAKING": [
+      null,
+      {
+        "exports": null
+      }
+    ]
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
   }
 }

@@ -4,7 +4,7 @@ import type { SourceType } from "./options";
 import type { Token } from "./tokenizer";
 import type { SourceLocation } from "./util/location";
 import type { PlaceholderTypes } from "./plugins/placeholders";
-import type { ParsingError } from "./parser/error";
+import type { ParseError } from "./parse-error";
 
 /*
  * If making any changes to the AST, update:
@@ -159,7 +159,7 @@ export type DecimalLiteral = NodeBase & {
 
 export type ParserOutput = {
   comments: $ReadOnlyArray<Comment>,
-  errors: Array<ParsingError>,
+  errors: Array<ParseError<any>>,
   tokens?: $ReadOnlyArray<Token | Comment>,
 };
 // Programs
@@ -707,6 +707,8 @@ export type ModuleExpression = NodeBase & {
 // TypeScript access modifiers
 export type Accessibility = "public" | "protected" | "private";
 
+export type VarianceAnnotations = "in" | "out";
+
 export type PatternBase = HasDecorators & {
   // TODO: All not in spec
   // Flow/TypeScript only:
@@ -782,7 +784,8 @@ export type ClassMember =
   | ClassMethod
   | ClassPrivateMethod
   | ClassProperty
-  | ClassPrivateProperty;
+  | ClassPrivateProperty
+  | ClassAccessorProperty;
 
 export type MethodLike =
   | ObjectMethod
@@ -854,6 +857,20 @@ export type ClassPrivateProperty = NodeBase & {
   // Flow only
   variance?: ?FlowVariance,
 };
+
+export type ClassAccessorProperty = ClassMemberBase &
+  DeclarationBase & {
+    type: "ClassAccessorProperty",
+    key: Expression | PrivateName,
+    value: ?Expression,
+
+    typeAnnotation?: ?TypeAnnotationBase, // TODO: Not in spec
+    variance?: ?FlowVariance, // TODO: Not in spec
+
+    // TypeScript only: (TODO: Not in spec)
+    readonly?: true,
+    definite?: true,
+  };
 
 export type OptClassDeclaration = ClassBase &
   DeclarationBase &
@@ -1025,6 +1042,8 @@ export type TsTypeParameter = NodeBase & {
   type: "TSTypeParameter",
   // TODO(Babel-8): remove string type support
   name: string | Identifier,
+  in?: boolean,
+  out?: boolean,
   constraint?: TsType,
   default?: TsType,
 };
@@ -1255,6 +1274,11 @@ export type TsSignatureDeclaration =
 
 export type TsSignatureDeclarationOrIndexSignatureBase = NodeBase & {
   // Not using TypeScript's "ParameterDeclaration" here, since it's inconsistent with regular functions.
+  params: $ReadOnlyArray<
+    Identifier | RestElement | ObjectPattern | ArrayPattern,
+  >,
+  returnType: ?TsTypeAnnotation,
+  // TODO(Babel-8): Remove
   parameters: $ReadOnlyArray<
     Identifier | RestElement | ObjectPattern | ArrayPattern,
   >,
@@ -1397,6 +1421,7 @@ export type TsTypePredicate = TsTypeBase & {
 export type TsTypeQuery = TsTypeBase & {
   type: "TSTypeQuery",
   exprName: TsEntityName | TsImportType,
+  typeParameters?: TsTypeParameterInstantiation,
 };
 
 export type TsTypeLiteral = TsTypeBase & {
@@ -1455,7 +1480,7 @@ export type TsConditionalType = TsTypeBase & {
 
 export type TsInferType = TsTypeBase & {
   type: "TSInferType",
-  typeParameter: TypeParameter,
+  typeParameter: TsTypeParameter,
 };
 
 export type TsParenthesizedType = TsTypeBase & {
@@ -1610,6 +1635,12 @@ export type TsTypeAssertion = TsTypeAssertionLikeBase & {
 export type TsNonNullExpression = NodeBase & {
   type: "TSNonNullExpression",
   expression: Expression,
+};
+
+export type TsInstantiationExpression = NodeBase & {
+  type: "TSInstantiationExpression",
+  expression: Expression,
+  typeParameters: TsTypeParameterInstantiation,
 };
 
 // ================

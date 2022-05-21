@@ -94,13 +94,20 @@ defineType("TSQualifiedName", {
 
 const signatureDeclarationCommon = {
   typeParameters: validateOptionalType("TSTypeParameterDeclaration"),
-  parameters: validateArrayOfType(["Identifier", "RestElement"]),
-  typeAnnotation: validateOptionalType("TSTypeAnnotation"),
+  [process.env.BABEL_8_BREAKING ? "params" : "parameters"]: validateArrayOfType(
+    ["Identifier", "RestElement"],
+  ),
+  [process.env.BABEL_8_BREAKING ? "returnType" : "typeAnnotation"]:
+    validateOptionalType("TSTypeAnnotation"),
 };
 
 const callConstructSignatureDeclaration = {
   aliases: ["TSTypeElement"],
-  visitor: ["typeParameters", "parameters", "typeAnnotation"],
+  visitor: [
+    "typeParameters",
+    process.env.BABEL_8_BREAKING ? "params" : "parameters",
+    process.env.BABEL_8_BREAKING ? "returnType" : "typeAnnotation",
+  ],
   fields: signatureDeclarationCommon,
 };
 
@@ -132,7 +139,12 @@ defineType("TSPropertySignature", {
 
 defineType("TSMethodSignature", {
   aliases: ["TSTypeElement"],
-  visitor: ["key", "typeParameters", "parameters", "typeAnnotation"],
+  visitor: [
+    "key",
+    "typeParameters",
+    process.env.BABEL_8_BREAKING ? "params" : "parameters",
+    process.env.BABEL_8_BREAKING ? "returnType" : "typeAnnotation",
+  ],
   fields: {
     ...signatureDeclarationCommon,
     ...namedTypeElementCommon,
@@ -185,7 +197,11 @@ defineType("TSThisType", {
 
 const fnOrCtrBase = {
   aliases: ["TSType"],
-  visitor: ["typeParameters", "parameters", "typeAnnotation"],
+  visitor: [
+    "typeParameters",
+    process.env.BABEL_8_BREAKING ? "params" : "parameters",
+    process.env.BABEL_8_BREAKING ? "returnType" : "typeAnnotation",
+  ],
 };
 
 defineType("TSFunctionType", {
@@ -222,9 +238,10 @@ defineType("TSTypePredicate", {
 
 defineType("TSTypeQuery", {
   aliases: ["TSType"],
-  visitor: ["exprName"],
+  visitor: ["exprName", "typeParameters"],
   fields: {
     exprName: validateType(["TSEntityName", "TSImportType"]),
+    typeParameters: validateOptionalType("TSTypeParameterInstantiation"),
   },
 });
 
@@ -433,8 +450,17 @@ defineType("TSTypeAliasDeclaration", {
   },
 });
 
-defineType("TSAsExpression", {
+defineType("TSInstantiationExpression", {
   aliases: ["Expression"],
+  visitor: ["expression", "typeParameters"],
+  fields: {
+    expression: validateType("Expression"),
+    typeParameters: validateOptionalType("TSTypeParameterInstantiation"),
+  },
+});
+
+defineType("TSAsExpression", {
+  aliases: ["Expression", "LVal", "PatternLike"],
   visitor: ["expression", "typeAnnotation"],
   fields: {
     expression: validateType("Expression"),
@@ -443,7 +469,7 @@ defineType("TSAsExpression", {
 });
 
 defineType("TSTypeAssertion", {
-  aliases: ["Expression"],
+  aliases: ["Expression", "LVal", "PatternLike"],
   visitor: ["typeAnnotation", "expression"],
   fields: {
     typeAnnotation: validateType("TSType"),
@@ -526,7 +552,7 @@ defineType("TSExternalModuleReference", {
 });
 
 defineType("TSNonNullExpression", {
-  aliases: ["Expression"],
+  aliases: ["Expression", "LVal", "PatternLike"],
   visitor: ["expression"],
   fields: {
     expression: validateType("Expression"),
@@ -590,6 +616,14 @@ defineType("TSTypeParameter", {
       validate: !process.env.BABEL_8_BREAKING
         ? assertValueType("string")
         : assertNodeType("Identifier"),
+    },
+    in: {
+      validate: assertValueType("boolean"),
+      optional: true,
+    },
+    out: {
+      validate: assertValueType("boolean"),
+      optional: true,
     },
     constraint: {
       validate: assertNodeType("TSType"),

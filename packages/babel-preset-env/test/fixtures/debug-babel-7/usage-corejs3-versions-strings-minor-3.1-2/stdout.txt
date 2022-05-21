@@ -12,7 +12,7 @@ Using modules transform: auto
 Using plugins:
   proposal-class-static-block { chrome < 94, firefox < 93, ie }
   proposal-private-property-in-object { chrome < 91, firefox < 90, ie }
-  proposal-class-properties { chrome < 84, firefox < 90, ie }
+  proposal-class-properties { chrome < 74, firefox < 90, ie }
   proposal-private-methods { chrome < 84, firefox < 90, ie }
   proposal-numeric-separator { chrome < 75, firefox < 70, ie }
   proposal-logical-assignment-operators { chrome < 85, firefox < 79, ie }
@@ -72,5 +72,4 @@ The corejs3 polyfill added the following polyfills:
   web.dom-collections.iterator { "chrome":"52", "firefox":"50", "ie":"11" }
 
 [<CWD>/packages/babel-preset-env/test/fixtures/debug-babel-7/usage-corejs3-versions-strings-minor-3.1-2/input.js]
-The regenerator polyfill added the following polyfills:
-  regenerator-runtime
+Based on your code and targets, the regenerator polyfill did not add any polyfill.

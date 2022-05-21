@@ -10,22 +10,37 @@ import {
 } from "@babel/helper-module-transforms";
 import simplifyAccess from "@babel/helper-simple-access";
 import { template, types as t } from "@babel/core";
+import type { PluginOptions } from "@babel/helper-module-transforms";
 
 import { createDynamicImportTransform } from "babel-plugin-dynamic-import-node/utils";
 
-export default declare((api, options) => {
+export interface Options extends PluginOptions {
+  allowCommonJSExports?: boolean;
+  allowTopLevelThis?: boolean;
+  importInterop?: "babel" | "node";
+  lazy?: boolean | string[] | ((string) => boolean);
+  loose?: boolean;
+  mjsStrictNamespace?: boolean;
+  noInterop?: boolean;
+  strict?: boolean;
+  strictMode?: boolean;
+  strictNamespace?: boolean;
+}
+
+export default declare((api, options: Options) => {
   api.assertVersion(7);
 
   const transformImportCall = createDynamicImportTransform(api);
 
   const {
-    // 'true' for non-mjs files to strictly have .default, instead of having
-    // destructuring-like behavior for their properties.
+    // 'true' for imports to strictly have .default, instead of having
+    // destructuring-like behavior for their properties. This matches the behavior
+    // of the initial Node.js (v12) behavior when importing a CommonJS without
+    // the __esMoule property.
+    // .strictNamespace is for non-mjs files, mjsStrictNamespace if for mjs files.
     strictNamespace = false,
+    mjsStrictNamespace = strictNamespace,
 
-    // 'true' for mjs files to strictly have .default, instead of having
-    // destructuring-like behavior for their properties.
-    mjsStrictNamespace = true,
     allowTopLevelThis,
     strict,
     strictMode,
@@ -34,14 +49,14 @@ export default declare((api, options) => {
     lazy = false,
     // Defaulting to 'true' for now. May change before 7.x major.
     allowCommonJSExports = true,
+    loose = false,
   } = options;
 
-  const constantReexports =
-    api.assumption("constantReexports") ?? options.loose;
-  const enumerableModuleMeta =
-    api.assumption("enumerableModuleMeta") ?? options.loose;
-  const noIncompleteNsImportDetection =
-    api.assumption("noIncompleteNsImportDetection") ?? false;
+  const constantReexports = api.assumption("constantReexports") ?? loose;
+  const enumerableModuleMeta = api.assumption("enumerableModuleMeta") ?? loose;
+  const noIncompleteNsImportDetection = (api.assumption(
+    "noIncompleteNsImportDetection",
+  ) ?? false) as boolean;
 
   if (
     typeof lazy !== "boolean" &&
@@ -87,6 +102,26 @@ export default declare((api, options) => {
       }
 
       path.replaceWith(getAssertion(localName));
+    },
+
+    UpdateExpression(path) {
+      const arg = path.get("argument");
+      const localName = arg.node.name;
+      if (localName !== "module" && localName !== "exports") return;
+
+      const localBinding = path.scope.getBinding(localName);
+      const rootBinding = this.scope.getBinding(localName);
+
+      // redeclared in this scope
+      if (rootBinding !== localBinding) return;
+
+      path.replaceWith(
+        t.assignmentExpression(
+          path.node.operator[0] + "=",
+          arg.node,
+          getAssertion(localName),
+        ),
+      );
     },
 
     AssignmentExpression(path) {
@@ -162,7 +197,7 @@ export default declare((api, options) => {
           // These objects are specific to CommonJS and are not available in
           // real ES6 implementations.
           if (!allowCommonJSExports) {
-            simplifyAccess(path, new Set(["module", "exports"]));
+            simplifyAccess(path, new Set(["module", "exports"]), false);
             path.traverse(moduleExportsVisitor, {
               scope: path.scope,
             });
@@ -190,6 +225,7 @@ export default declare((api, options) => {
                   ? mjsStrictNamespace
                   : strictNamespace,
               noIncompleteNsImportDetection,
+              filename: this.file.opts.filename,
             },
           );
 
@@ -235,6 +271,12 @@ export default declare((api, options) => {
 
           ensureStatementsHoisted(headers);
           path.unshiftContainer("body", headers);
+          path.get("body").forEach(path => {
+            if (headers.indexOf(path.node) === -1) return;
+            if (path.isVariableDeclaration()) {
+              path.scope.registerDeclaration(path);
+            }
+          });
         },
       },
     },

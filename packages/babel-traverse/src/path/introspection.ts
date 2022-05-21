@@ -135,10 +135,10 @@ export function isCompletionRecord(
   let first = true;
 
   do {
-    const container = path.container;
+    const { type, container } = path;
 
     // we're in a function so can't be a completion record
-    if (path.isFunction() && !first) {
+    if (!first && (path.isFunction() || type === "StaticBlock")) {
       return !!allowInsideFunction;
     }
 
@@ -149,7 +149,11 @@ export function isCompletionRecord(
     if (Array.isArray(container) && path.key !== container.length - 1) {
       return false;
     }
-  } while ((path = path.parentPath) && !path.isProgram());
+  } while (
+    (path = path.parentPath) &&
+    !path.isProgram() &&
+    !path.isDoExpression()
+  );
 
   return true;
 }
@@ -175,16 +179,18 @@ export function isStatementOrBlock(this: NodePath): boolean {
  */
 
 export function referencesImport(
-  this: NodePath<t.Expression>,
+  this: NodePath,
   moduleSource: string,
   importName: string,
 ): boolean {
   if (!this.isReferencedIdentifier()) {
     if (
-      (this.isMemberExpression() || this.isOptionalMemberExpression()) &&
-      (this.node.computed
-        ? isStringLiteral(this.node.property, { value: importName })
-        : (this.node.property as t.Identifier).name === importName)
+      (this.isJSXMemberExpression() &&
+        this.node.property.name === importName) ||
+      ((this.isMemberExpression() || this.isOptionalMemberExpression()) &&
+        (this.node.computed
+          ? isStringLiteral(this.node.property, { value: importName })
+          : (this.node.property as t.Identifier).name === importName))
     ) {
       const object = (
         this as NodePath<t.MemberExpression | t.OptionalMemberExpression>

@@ -9,7 +9,7 @@ import type {
   SimpleType,
 } from "../caching";
 
-import type { CallerMetadata } from "../validation/options";
+import type { AssumptionName, CallerMetadata } from "../validation/options";
 
 import * as Context from "../cache-contexts";
 
@@ -24,7 +24,7 @@ type CallerFactory = (
   extractor: (callerMetadata: CallerMetadata | void) => unknown,
 ) => SimpleType;
 type TargetsFunction = () => Targets;
-type AssumptionFunction = (name: string) => boolean | void;
+type AssumptionFunction = (name: AssumptionName) => boolean | void;
 
 export type ConfigAPI = {
   version: string;
@@ -37,6 +37,7 @@ export type ConfigAPI = {
 
 export type PresetAPI = {
   targets: TargetsFunction;
+  addExternalDependency: (ref: string) => void;
 } & ConfigAPI;
 
 export type PluginAPI = {
@@ -77,6 +78,7 @@ export function makeConfigAPI<SideChannel extends Context.SimpleConfig>(
 
 export function makePresetAPI<SideChannel extends Context.SimplePreset>(
   cache: CacheConfigurator<SideChannel>,
+  externalDependencies: Array<string>,
 ): PresetAPI {
   const targets = () =>
     // We are using JSON.parse/JSON.stringify because it's only possible to cache
@@ -84,15 +86,21 @@ export function makePresetAPI<SideChannel extends Context.SimplePreset>(
     // only contains strings as its properties.
     // Please make the Record and Tuple proposal happen!
     JSON.parse(cache.using(data => JSON.stringify(data.targets)));
-  return { ...makeConfigAPI(cache), targets };
+
+  const addExternalDependency = (ref: string) => {
+    externalDependencies.push(ref);
+  };
+
+  return { ...makeConfigAPI(cache), targets, addExternalDependency };
 }
 
 export function makePluginAPI<SideChannel extends Context.SimplePlugin>(
   cache: CacheConfigurator<SideChannel>,
+  externalDependencies: Array<string>,
 ): PluginAPI {
   const assumption = name => cache.using(data => data.assumptions[name]);
 
-  return { ...makePresetAPI(cache), assumption };
+  return { ...makePresetAPI(cache, externalDependencies), assumption };
 }
 
 function assertVersion(range: string | number): void {

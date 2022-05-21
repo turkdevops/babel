@@ -256,6 +256,32 @@ describe("scope", () => {
       });
     });
 
+    describe("decorator", () => {
+      const parserOptions = {
+        plugins: [["decorators", { decoratorsBeforeExport: true }]],
+      };
+      it("should not have visibility of declarations inside method body", () => {
+        expect(
+          getPath(
+            `var a = "outside"; class foo { @(() => () => a) m() { let a = "inside"; } }`,
+            parserOptions,
+          )
+            .get("body.1.body.body.0.decorators.0.expression.body.body")
+            .scope.getBinding("a").path.node.init.value,
+        ).toBe("outside");
+      });
+      it("should not have visibility on parameter bindings", () => {
+        expect(
+          getPath(
+            `var a = "outside"; class foo { @(() => () => a) m(a = "inside") {} }`,
+            parserOptions,
+          )
+            .get("body.1.body.body.0.decorators.0.expression.body.body")
+            .scope.getBinding("a").path.node.init.value,
+        ).toBe("outside");
+      });
+    });
+
     it("variable declaration", function () {
       expect(getPath("var foo = null;").scope.getBinding("foo").path.type).toBe(
         "VariableDeclarator",
@@ -365,39 +391,6 @@ describe("scope", () => {
       ).toBe(false);
     });
 
-    it("purity", function () {
-      expect(
-        getPath("({ x: 1, foo() { return 1 } })")
-          .get("body")[0]
-          .get("expression")
-          .isPure(),
-      ).toBeTruthy();
-      expect(
-        getPath("class X { get foo() { return 1 } }")
-          .get("body")[0]
-          .get("expression")
-          .isPure(),
-      ).toBeFalsy();
-      expect(
-        getPath("`${a}`").get("body")[0].get("expression").isPure(),
-      ).toBeFalsy();
-      expect(
-        getPath("let a = 1; `${a}`").get("body")[1].get("expression").isPure(),
-      ).toBeTruthy();
-      expect(
-        getPath("let a = 1; `${a++}`")
-          .get("body")[1]
-          .get("expression")
-          .isPure(),
-      ).toBeFalsy();
-      expect(
-        getPath("tagged`foo`").get("body")[0].get("expression").isPure(),
-      ).toBeFalsy();
-      expect(
-        getPath("String.raw`foo`").get("body")[0].get("expression").isPure(),
-      ).toBeTruthy();
-    });
-
     test("label", function () {
       expect(getPath("foo: { }").scope.getBinding("foo")).toBeUndefined();
       expect(getPath("foo: { }").scope.getLabel("foo").type).toBe(
@@ -442,10 +435,12 @@ describe("scope", () => {
         expect(referencePaths[0].node.loc.start).toEqual({
           line: 1,
           column: 28,
+          index: 28,
         });
         expect(referencePaths[1].node.loc.start).toEqual({
           line: 1,
           column: 32,
+          index: 32,
         });
       });
       it("id referenced in function body", () => {
@@ -540,7 +535,7 @@ describe("scope", () => {
       path.scope.crawl();
       path.scope.crawl();
 
-      expect(path.scope.references._jsx).toBeTruthy();
+      expect(path.scope.references._jsx).toBe(true);
     });
 
     test("generateUid collision check after re-crawling", function () {
@@ -763,7 +758,7 @@ describe("scope", () => {
       });
       it("in function declaration", () => {
         const functionDeclaration = getPath("function f() { var foo; }").get(
-          "body.0.expression",
+          "body.0",
         );
         expect(functionDeclaration.scope.hasOwnBinding("foo")).toBe(true);
       });
@@ -851,7 +846,7 @@ describe("scope", () => {
       });
       it("in function declaration", () => {
         const functionDeclaration = getPath("function f() { let foo; }").get(
-          "body.0.expression",
+          "body.0",
         );
         expect(functionDeclaration.scope.hasOwnBinding("foo")).toBe(true);
       });
@@ -918,6 +913,45 @@ describe("scope", () => {
         );
         expect(switchStatement.scope.hasOwnBinding("foo")).toBe(true);
       });
+    });
+  });
+
+  describe(".push", () => {
+    it("registers the new binding in the correct scope", () => {
+      const program = getPath("class A {}");
+      const classDeclaration = program.get("body.0");
+      classDeclaration.scope.push({ id: t.identifier("class") });
+      expect(program.toString()).toMatchInlineSnapshot(`
+        "var class;
+
+        class A {}"
+      `);
+      expect(program.scope.hasOwnBinding("class")).toBe(true);
+    });
+    it("registers the new binding outside function when the path is a param initializer", () => {
+      const program = getPath("(a = f()) => {}");
+      const assignmentPattern = program.get("body.0.expression.params.0");
+      assignmentPattern.scope.push({ id: t.identifier("ref") });
+      expect(program.toString()).toMatchInlineSnapshot(`
+        "var ref;
+
+        (a = f()) => {};"
+      `);
+      expect(program.scope.hasOwnBinding("ref")).toBe(true);
+    });
+    it("registers the new binding outside class method when the path is a param initializer", () => {
+      const program = getPath("class C { m(a = f()) {} }");
+      const assignmentPattern = program.get("body.0.body.body.0.params.0");
+      assignmentPattern.scope.push({ id: t.identifier("ref") });
+      expect(program.toString()).toMatchInlineSnapshot(`
+        "var ref;
+
+        class C {
+          m(a = f()) {}
+
+        }"
+      `);
+      expect(program.scope.hasOwnBinding("ref")).toBe(true);
     });
   });
 });

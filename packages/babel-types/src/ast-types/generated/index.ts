@@ -32,13 +32,13 @@ export interface SourceLocation {
 }
 
 interface BaseNode {
-  leadingComments: ReadonlyArray<Comment> | null;
-  innerComments: ReadonlyArray<Comment> | null;
-  trailingComments: ReadonlyArray<Comment> | null;
-  start: number | null;
-  end: number | null;
-  loc: SourceLocation | null;
   type: Node["type"];
+  leadingComments?: ReadonlyArray<Comment> | null;
+  innerComments?: ReadonlyArray<Comment> | null;
+  trailingComments?: ReadonlyArray<Comment> | null;
+  start?: number | null;
+  end?: number | null;
+  loc?: SourceLocation | null;
   range?: [number, number];
   extra?: Record<string, unknown>;
 }
@@ -65,6 +65,7 @@ export type Node =
   | BreakStatement
   | CallExpression
   | CatchClause
+  | ClassAccessorProperty
   | ClassBody
   | ClassDeclaration
   | ClassExpression
@@ -227,6 +228,7 @@ export type Node =
   | TSIndexSignature
   | TSIndexedAccessType
   | TSInferType
+  | TSInstantiationExpression
   | TSInterfaceBody
   | TSInterfaceDeclaration
   | TSIntersectionType
@@ -333,7 +335,8 @@ export interface BinaryExpression extends BaseNode {
     | ">"
     | "<"
     | ">="
-    | "<=";
+    | "<="
+    | "|>";
   left: Expression | PrivateName;
   right: Expression;
 }
@@ -442,6 +445,7 @@ export interface FunctionDeclaration extends BaseNode {
   generator?: boolean;
   async?: boolean;
   declare?: boolean | null;
+  predicate?: DeclaredPredicate | InferredPredicate | null;
   returnType?: TypeAnnotation | TSTypeAnnotation | Noop | null;
   typeParameters?:
     | TypeParameterDeclaration
@@ -457,6 +461,7 @@ export interface FunctionExpression extends BaseNode {
   body: BlockStatement;
   generator?: boolean;
   async?: boolean;
+  predicate?: DeclaredPredicate | InferredPredicate | null;
   returnType?: TypeAnnotation | TSTypeAnnotation | Noop | null;
   typeParameters?:
     | TypeParameterDeclaration
@@ -588,7 +593,14 @@ export interface ObjectMethod extends BaseNode {
 
 export interface ObjectProperty extends BaseNode {
   type: "ObjectProperty";
-  key: Expression | Identifier | StringLiteral | NumericLiteral;
+  key:
+    | Expression
+    | Identifier
+    | StringLiteral
+    | NumericLiteral
+    | BigIntLiteral
+    | DecimalLiteral
+    | PrivateName;
   value: Expression | PatternLike;
   computed: boolean;
   shorthand: boolean;
@@ -699,7 +711,14 @@ export interface WithStatement extends BaseNode {
 
 export interface AssignmentPattern extends BaseNode {
   type: "AssignmentPattern";
-  left: Identifier | ObjectPattern | ArrayPattern | MemberExpression;
+  left:
+    | Identifier
+    | ObjectPattern
+    | ArrayPattern
+    | MemberExpression
+    | TSAsExpression
+    | TSTypeAssertion
+    | TSNonNullExpression;
   right: Expression;
   decorators?: Array<Decorator> | null;
   typeAnnotation?: TypeAnnotation | TSTypeAnnotation | Noop | null;
@@ -720,6 +739,7 @@ export interface ArrowFunctionExpression extends BaseNode {
   async?: boolean;
   expression: boolean;
   generator?: boolean;
+  predicate?: DeclaredPredicate | InferredPredicate | null;
   returnType?: TypeAnnotation | TSTypeAnnotation | Noop | null;
   typeParameters?:
     | TypeParameterDeclaration
@@ -735,8 +755,10 @@ export interface ClassBody extends BaseNode {
     | ClassPrivateMethod
     | ClassProperty
     | ClassPrivateProperty
+    | ClassAccessorProperty
     | TSDeclareMethod
     | TSIndexSignature
+    | StaticBlock
   >;
 }
 
@@ -988,6 +1010,24 @@ export interface ClassProperty extends BaseNode {
   variance?: Variance | null;
 }
 
+export interface ClassAccessorProperty extends BaseNode {
+  type: "ClassAccessorProperty";
+  key: Identifier | StringLiteral | NumericLiteral | Expression | PrivateName;
+  value?: Expression | null;
+  typeAnnotation?: TypeAnnotation | TSTypeAnnotation | Noop | null;
+  decorators?: Array<Decorator> | null;
+  computed?: boolean;
+  static?: boolean;
+  abstract?: boolean | null;
+  accessibility?: "public" | "private" | "protected" | null;
+  declare?: boolean | null;
+  definite?: boolean | null;
+  optional?: boolean | null;
+  override?: boolean;
+  readonly?: boolean | null;
+  variance?: Variance | null;
+}
+
 export interface ClassPrivateProperty extends BaseNode {
   type: "ClassPrivateProperty";
   key: PrivateName;
@@ -1221,9 +1261,9 @@ export interface NumberTypeAnnotation extends BaseNode {
 export interface ObjectTypeAnnotation extends BaseNode {
   type: "ObjectTypeAnnotation";
   properties: Array<ObjectTypeProperty | ObjectTypeSpreadProperty>;
-  indexers?: Array<ObjectTypeIndexer> | null;
-  callProperties?: Array<ObjectTypeCallProperty> | null;
-  internalSlots?: Array<ObjectTypeInternalSlot> | null;
+  indexers?: Array<ObjectTypeIndexer>;
+  callProperties?: Array<ObjectTypeCallProperty>;
+  internalSlots?: Array<ObjectTypeInternalSlot>;
   exact: boolean;
   inexact?: boolean | null;
 }
@@ -1793,6 +1833,7 @@ export interface TSTypePredicate extends BaseNode {
 export interface TSTypeQuery extends BaseNode {
   type: "TSTypeQuery";
   exprName: TSEntityName | TSImportType;
+  typeParameters?: TSTypeParameterInstantiation | null;
 }
 
 export interface TSTypeLiteral extends BaseNode {
@@ -1914,6 +1955,12 @@ export interface TSTypeAliasDeclaration extends BaseNode {
   declare?: boolean | null;
 }
 
+export interface TSInstantiationExpression extends BaseNode {
+  type: "TSInstantiationExpression";
+  expression: Expression;
+  typeParameters?: TSTypeParameterInstantiation | null;
+}
+
 export interface TSAsExpression extends BaseNode {
   type: "TSAsExpression";
   expression: Expression;
@@ -2009,6 +2056,8 @@ export interface TSTypeParameter extends BaseNode {
   constraint?: TSType | null;
   default?: TSType | null;
   name: string;
+  in?: boolean | null;
+  out?: boolean | null;
 }
 
 export type Standardized =
@@ -2094,6 +2143,7 @@ export type Standardized =
   | OptionalMemberExpression
   | OptionalCallExpression
   | ClassProperty
+  | ClassAccessorProperty
   | ClassPrivateProperty
   | ClassPrivateMethod
   | PrivateName
@@ -2145,6 +2195,7 @@ export type Expression =
   | PipelineTopicExpression
   | PipelineBareFunction
   | PipelinePrimaryTopicReference
+  | TSInstantiationExpression
   | TSAsExpression
   | TSTypeAssertion
   | TSNonNullExpression;
@@ -2320,7 +2371,10 @@ export type PatternLike =
   | RestElement
   | AssignmentPattern
   | ArrayPattern
-  | ObjectPattern;
+  | ObjectPattern
+  | TSAsExpression
+  | TSTypeAssertion
+  | TSNonNullExpression;
 export type LVal =
   | Identifier
   | MemberExpression
@@ -2328,7 +2382,10 @@ export type LVal =
   | AssignmentPattern
   | ArrayPattern
   | ObjectPattern
-  | TSParameterProperty;
+  | TSParameterProperty
+  | TSAsExpression
+  | TSTypeAssertion
+  | TSNonNullExpression;
 export type TSEntityName = Identifier | TSQualifiedName;
 export type Literal =
   | StringLiteral
@@ -2366,7 +2423,11 @@ export type UserWhitespacable =
   | ObjectTypeSpreadProperty;
 export type Method = ObjectMethod | ClassMethod | ClassPrivateMethod;
 export type ObjectMember = ObjectMethod | ObjectProperty;
-export type Property = ObjectProperty | ClassProperty | ClassPrivateProperty;
+export type Property =
+  | ObjectProperty
+  | ClassProperty
+  | ClassAccessorProperty
+  | ClassPrivateProperty;
 export type UnaryLike = UnaryExpression | SpreadElement;
 export type Pattern = AssignmentPattern | ArrayPattern | ObjectPattern;
 export type Class = ClassExpression | ClassDeclaration;
@@ -2386,6 +2447,7 @@ export type ModuleSpecifier =
   | ImportSpecifier
   | ExportNamespaceSpecifier
   | ExportDefaultSpecifier;
+export type Accessor = ClassAccessorProperty;
 export type Private = ClassPrivateProperty | ClassPrivateMethod | PrivateName;
 export type Flow =
   | AnyTypeAnnotation
@@ -2581,6 +2643,7 @@ export type TypeScript =
   | TSInterfaceDeclaration
   | TSInterfaceBody
   | TSTypeAliasDeclaration
+  | TSInstantiationExpression
   | TSAsExpression
   | TSTypeAssertion
   | TSEnumDeclaration
@@ -2691,6 +2754,7 @@ export interface Aliases {
   ModuleDeclaration: ModuleDeclaration;
   ExportDeclaration: ExportDeclaration;
   ModuleSpecifier: ModuleSpecifier;
+  Accessor: Accessor;
   Private: Private;
   Flow: Flow;
   FlowType: FlowType;

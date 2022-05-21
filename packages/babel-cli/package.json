@@ -1,6 +1,6 @@
 {
   "name": "@babel/cli",
-  "version": "7.16.0",
+  "version": "7.17.10",
   "description": "Babel command line.",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-cli",
@@ -24,13 +24,13 @@
     "compiler"
   ],
   "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.8",
     "commander": "^4.0.1",
     "convert-source-map": "^1.1.0",
     "fs-readdir-recursive": "^1.1.0",
     "glob": "^7.0.0",
     "make-dir": "condition:BABEL_8_BREAKING ? : ^2.1.0",
-    "slash": "condition:BABEL_8_BREAKING ? ^3.0.0 : ^2.0.0",
-    "source-map": "^0.5.0"
+    "slash": "condition:BABEL_8_BREAKING ? ^3.0.0 : ^2.0.0"
   },
   "optionalDependencies": {
     "@nicolo-ribaudo/chokidar-2": "condition:BABEL_8_BREAKING ? : 2.1.8-no-fsevents.3",
@@ -50,5 +50,17 @@
   },
   "engines": {
     "node": ">=6.9.0"
+  },
+  "conditions": {
+    "BABEL_8_BREAKING": [
+      null,
+      {
+        "exports": null
+      }
+    ]
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
   }
 }

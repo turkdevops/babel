@@ -8,6 +8,7 @@ import syntaxClassProperties from "@babel/plugin-syntax-class-properties";
 import syntaxClassStaticBlock from "@babel/plugin-syntax-class-static-block";
 import syntaxDecimal from "@babel/plugin-syntax-decimal";
 import syntaxDecorators from "@babel/plugin-syntax-decorators";
+import syntaxDestructuringPrivate from "@babel/plugin-syntax-destructuring-private";
 import syntaxDoExpressions from "@babel/plugin-syntax-do-expressions";
 import syntaxExportDefaultFrom from "@babel/plugin-syntax-export-default-from";
 import syntaxFlow from "@babel/plugin-syntax-flow";
@@ -27,6 +28,7 @@ import proposalAsyncGeneratorFunctions from "@babel/plugin-proposal-async-genera
 import proposalClassProperties from "@babel/plugin-proposal-class-properties";
 import proposalClassStaticBlock from "@babel/plugin-proposal-class-static-block";
 import proposalDecorators from "@babel/plugin-proposal-decorators";
+import proposalDestructuringPrivate from "@babel/plugin-proposal-destructuring-private";
 import proposalDoExpressions from "@babel/plugin-proposal-do-expressions";
 import proposalDynamicImport from "@babel/plugin-proposal-dynamic-import";
 import proposalExportDefaultFrom from "@babel/plugin-proposal-export-default-from";
@@ -103,6 +105,7 @@ export {
   syntaxClassStaticBlock,
   syntaxDecimal,
   syntaxDecorators,
+  syntaxDestructuringPrivate,
   syntaxDoExpressions,
   syntaxExportDefaultFrom,
   syntaxFlow,
@@ -122,6 +125,7 @@ export {
   proposalClassProperties,
   proposalClassStaticBlock,
   proposalDecorators,
+  proposalDestructuringPrivate,
   proposalDoExpressions,
   proposalDynamicImport,
   proposalExportDefaultFrom,
@@ -199,6 +203,7 @@ export const all: { [k: string]: any } = {
   "syntax-class-static-block": syntaxClassStaticBlock,
   "syntax-decimal": syntaxDecimal,
   "syntax-decorators": syntaxDecorators,
+  "syntax-destructuring-private": syntaxDestructuringPrivate,
   "syntax-do-expressions": syntaxDoExpressions,
   "syntax-export-default-from": syntaxExportDefaultFrom,
   "syntax-flow": syntaxFlow,
@@ -218,6 +223,7 @@ export const all: { [k: string]: any } = {
   "proposal-class-properties": proposalClassProperties,
   "proposal-class-static-block": proposalClassStaticBlock,
   "proposal-decorators": proposalDecorators,
+  "proposal-destructuring-private": proposalDestructuringPrivate,
   "proposal-do-expressions": proposalDoExpressions,
   "proposal-dynamic-import": proposalDynamicImport,
   "proposal-export-default-from": proposalExportDefaultFrom,

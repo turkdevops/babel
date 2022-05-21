@@ -1,6 +1,6 @@
 FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = 46f165ae490de7f1343165ab8d228db81eaa02c5
-TYPESCRIPT_COMMIT = bbd9ff51f5fa5208b223bbb75a94e5e8184e3ffd
+TEST262_COMMIT = 509363bcfd24b3476dc106eabc0ac856ed5eb51d
+TYPESCRIPT_COMMIT = ce85d647ef88183c019588bcf398320ce29b625a
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
 export FORCE_COLOR = true
@@ -40,6 +40,7 @@ build-no-bundle: clean clean-lib
 
 generate-tsconfig:
 	$(NODE) scripts/generators/tsconfig.js
+	$(NODE) scripts/generators/archived-libs-typings.js
 
 generate-type-helpers:
 	$(YARN) gulp generate-type-helpers
@@ -147,7 +148,7 @@ test-flow-update-allowlist:
 bootstrap-typescript:
 	rm -rf ./build/typescript
 	mkdir -p ./build
-	git clone --single-branch --shallow-since=2021-05-01 https://github.com/microsoft/TypeScript.git ./build/typescript
+	git clone --single-branch --shallow-since=2022-04-01 https://github.com/microsoft/TypeScript.git ./build/typescript
 	cd build/typescript && git checkout -q $(TYPESCRIPT_COMMIT)
 
 test-typescript:

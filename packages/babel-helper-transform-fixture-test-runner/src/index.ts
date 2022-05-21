@@ -5,8 +5,8 @@ import {
   default as getFixtures,
   resolveOptionPluginOrPreset,
 } from "@babel/helper-fixtures";
-import sourceMap from "source-map";
 import { codeFrameColumns } from "@babel/code-frame";
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import * as helpers from "./helpers";
 import assert from "assert";
 import fs from "fs";
@@ -18,8 +18,7 @@ import { fileURLToPath } from "url";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 
-import _checkDuplicatedNodes from "babel-check-duplicated-nodes";
-const checkDuplicatedNodes = _checkDuplicatedNodes.default;
+import checkDuplicateNodes from "@babel/helper-check-duplicate-nodes";
 
 const EXTERNAL_HELPERS_VERSION = "7.100.0";
 
@@ -55,15 +54,6 @@ function createContext() {
 
   const moduleCache = Object.create(null);
   contextModuleCache.set(context, moduleCache);
-
-  // Initialize the test context with the polyfill, and then freeze the global to prevent implicit
-  // global creation in tests, which could cause things to bleed between tests.
-  runModuleInTestContext(
-    "regenerator-runtime",
-    fileURLToPath(import.meta.url),
-    context,
-    moduleCache,
-  );
 
   // Populate the "babelHelpers" global with Babel's helper utilities.
   runCacheableScriptInTestContext(
@@ -270,7 +260,7 @@ function run(task) {
       babel.transform(execCode, execOpts),
     ));
 
-    checkDuplicatedNodes(babel, result.ast);
+    checkDuplicateNodes(result.ast);
     execCode = result.code;
 
     try {
@@ -294,7 +284,7 @@ function run(task) {
 
     const outputCode = normalizeOutput(result.code);
 
-    checkDuplicatedNodes(babel, result.ast);
+    checkDuplicateNodes(result.ast);
     if (!ignoreOutput) {
       if (
         !expected.code &&
@@ -342,16 +332,26 @@ function run(task) {
   }
 
   if (task.sourceMap) {
-    expect(result.map).toEqual(task.sourceMap);
+    try {
+      expect(result.map).toEqual(task.sourceMap);
+    } catch (e) {
+      if (!process.env.OVERWRITE || !task.sourceMapFile) throw e;
+
+      console.log(`Updated test file: ${task.sourceMapFile.loc}`);
+      fs.writeFileSync(
+        task.sourceMapFile.loc,
+        JSON.stringify(result.map, null, 2),
+      );
+    }
   }
 
   if (task.sourceMappings) {
-    const consumer = new sourceMap.SourceMapConsumer(result.map);
+    const consumer = new TraceMap(result.map);
 
     task.sourceMappings.forEach(function (mapping) {
       const actual = mapping.original;
 
-      const expected = consumer.originalPositionFor(mapping.generated);
+      const expected = originalPositionFor(consumer, mapping.generated);
       expect({ line: expected.line, column: expected.column }).toEqual(actual);
     });
   }

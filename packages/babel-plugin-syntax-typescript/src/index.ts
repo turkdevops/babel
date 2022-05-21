@@ -15,7 +15,12 @@ function removePlugin(plugins, name) {
   }
 }
 
-export default declare((api, { isTSX, disallowAmbiguousJSXLike }) => {
+export interface Options {
+  disallowAmbiguousJSXLike?: boolean;
+  isTSX?: boolean;
+}
+
+export default declare((api, { isTSX, disallowAmbiguousJSXLike }: Options) => {
   api.assertVersion(7);
 
   return {
@@ -31,18 +36,18 @@ export default declare((api, { isTSX, disallowAmbiguousJSXLike }) => {
       // in TS depends on the extensions, and is purely dependent on 'isTSX'.
       removePlugin(plugins, "jsx");
 
-      parserOpts.plugins.push(
+      plugins.push(
         ["typescript", { disallowAmbiguousJSXLike }],
         "classProperties",
       );
 
       if (!process.env.BABEL_8_BREAKING) {
         // This is enabled by default since @babel/parser 7.1.5
-        parserOpts.plugins.push("objectRestSpread");
+        plugins.push("objectRestSpread");
       }
 
       if (isTSX) {
-        parserOpts.plugins.push("jsx");
+        plugins.push("jsx");
       }
     },
   };

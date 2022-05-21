@@ -1,11 +1,12 @@
 import convertSourceMap from "convert-source-map";
-import sourceMap from "source-map";
+import { AnyMap, encodedMap } from "@jridgewell/trace-mapping";
 import slash from "slash";
 import path from "path";
 import fs from "fs";
 
 import * as util from "./util";
 import type { CmdOptions } from "./options";
+import * as watcher from "./watcher";
 
 type CompilationOutput = {
   code: string;
@@ -17,13 +18,7 @@ export default async function ({
   babelOptions,
 }: CmdOptions): Promise<void> {
   function buildResult(fileResults: Array<any>): CompilationOutput {
-    const map = new sourceMap.SourceMapGenerator({
-      file:
-        cliOptions.sourceMapTarget ||
-        path.basename(cliOptions.outFile || "") ||
-        "stdout",
-      sourceRoot: babelOptions.sourceRoot,
-    });
+    const mapSections = [];
 
     let code = "";
     let offset = 0;
@@ -31,41 +26,27 @@ export default async function ({
     for (const result of fileResults) {
       if (!result) continue;
 
+      mapSections.push({
+        offset: { line: offset, column: 0 },
+        map: result.map || emptyMap(),
+      });
+
       code += result.code + "\n";
-
-      if (result.map) {
-        const consumer = new sourceMap.SourceMapConsumer(result.map);
-        const sources = new Set<string>();
-
-        consumer.eachMapping(function (mapping) {
-          if (mapping.source != null) sources.add(mapping.source);
-
-          map.addMapping({
-            generated: {
-              line: mapping.generatedLine + offset,
-              column: mapping.generatedColumn,
-            },
-            source: mapping.source,
-            original:
-              mapping.source == null
-                ? null
-                : {
-                    line: mapping.originalLine,
-                    column: mapping.originalColumn,
-                  },
-          });
-        });
-
-        sources.forEach(source => {
-          const content = consumer.sourceContentFor(source, true);
-          if (content !== null) {
-            map.setSourceContent(source, content);
-          }
-        });
-
-        offset = code.split("\n").length - 1;
-      }
+      offset += countNewlines(result.code) + 1;
     }
+
+    const map = new AnyMap({
+      version: 3,
+      file:
+        cliOptions.sourceMapTarget ||
+        path.basename(cliOptions.outFile || "") ||
+        "stdout",
+      sections: mapSections,
+    });
+    // For some reason, the spec doesn't allow sourceRoot when constructing a
+    // sectioned sorucemap. But AllMap returns a regular sourcemap, we can
+    // freely add to with a sourceRoot.
+    map.sourceRoot = babelOptions.sourceRoot;
 
     // add the inline sourcemap comment if we've either explicitly asked for inline source
     // maps, or we've requested them without any output file
@@ -73,12 +54,28 @@ export default async function ({
       babelOptions.sourceMaps === "inline" ||
       (!cliOptions.outFile && babelOptions.sourceMaps)
     ) {
-      code += "\n" + convertSourceMap.fromObject(map).toComment();
+      code += "\n" + convertSourceMap.fromObject(encodedMap(map)).toComment();
     }
 
     return {
       map: map,
       code: code,
+    };
+  }
+  function countNewlines(code: string): number {
+    let count = 0;
+    let index = -1;
+    while ((index = code.indexOf("\n", index + 1)) !== -1) {
+      count++;
+    }
+    return count;
+  }
+  function emptyMap() {
+    return {
+      version: 3,
+      names: [],
+      sources: [],
+      mappings: [],
     };
   }
 
@@ -92,7 +89,7 @@ export default async function ({
       if (babelOptions.sourceMaps && babelOptions.sourceMaps !== "inline") {
         const mapLoc = cliOptions.outFile + ".map";
         result.code = util.addSourceMappingUrl(result.code, mapLoc);
-        fs.writeFileSync(mapLoc, JSON.stringify(result.map));
+        fs.writeFileSync(mapLoc, JSON.stringify(encodedMap(result.map)));
       }
 
       fs.writeFileSync(cliOptions.outFile, result.code);
@@ -123,7 +120,7 @@ export default async function ({
   async function stdin(): Promise<void> {
     const code = await readStdin();
 
-    const res = await util.transform(cliOptions.filename, code, {
+    const res = await util.transformRepl(cliOptions.filename, code, {
       ...babelOptions,
       sourceFileName: "stdin",
     });
@@ -193,40 +190,33 @@ export default async function ({
   }
 
   async function files(filenames: Array<string>): Promise<void> {
+    if (cliOptions.watch) {
+      watcher.enable({ enableGlobbing: false });
+    }
+
     if (!cliOptions.skipInitialBuild) {
       await walk(filenames);
     }
 
     if (cliOptions.watch) {
-      const chokidar = util.requireChokidar();
-      chokidar
-        .watch(filenames, {
-          disableGlobbing: true,
-          persistent: true,
-          ignoreInitial: true,
-          awaitWriteFinish: {
-            stabilityThreshold: 50,
-            pollInterval: 10,
-          },
-        })
-        .on("all", function (type: string, filename: string): void {
-          if (
-            !util.isCompilableExtension(filename, cliOptions.extensions) &&
-            !filenames.includes(filename)
-          ) {
-            return;
-          }
+      filenames.forEach(watcher.watch);
 
-          if (type === "add" || type === "change") {
-            if (cliOptions.verbose) {
-              console.log(type + " " + filename);
-            }
+      watcher.onFilesChange((changes, event, cause) => {
+        const actionableChange = changes.some(
+          filename =>
+            util.isCompilableExtension(filename, cliOptions.extensions) ||
+            filenames.includes(filename),
+        );
+        if (!actionableChange) return;
 
-            walk(filenames).catch(err => {
-              console.error(err);
-            });
-          }
+        if (cliOptions.verbose) {
+          console.log(`${event} ${cause}`);
+        }
+
+        walk(filenames).catch(err => {
+          console.error(err);
         });
+      });
     }
   }
 

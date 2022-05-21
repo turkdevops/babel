@@ -1,5 +1,5 @@
 import babel from "../lib/index.js";
-import sourceMap from "source-map";
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import path from "path";
 import generator from "@babel/generator";
 import { fileURLToPath } from "url";
@@ -532,15 +532,15 @@ describe("api", function () {
       ].join("\n"),
     ).toBe(result.code);
 
-    const consumer = new sourceMap.SourceMapConsumer(result.map);
+    const consumer = new TraceMap(result.map);
 
     expect(
-      consumer.originalPositionFor({
+      originalPositionFor(consumer, {
         line: 7,
         column: 4,
       }),
     ).toEqual({
-      name: null,
+      name: "Foo",
       source: "stdout",
       line: 1,
       column: 6,
@@ -798,7 +798,7 @@ describe("api", function () {
               "Support for the experimental syntax 'pipelineOperator' isn't currently enabled (1:3):",
             );
             expect(err.message).toMatch(
-              "Add @babel/plugin-proposal-pipeline-operator (https://git.io/vb4SU) to the " +
+              "Add @babel/plugin-proposal-pipeline-operator (https://github.com/babel/babel/tree/main/packages/babel-plugin-proposal-pipeline-operator) to the " +
                 "'plugins' section of your Babel config to enable transformation.",
             );
             resolve();
@@ -817,7 +817,7 @@ describe("api", function () {
               "Support for the experimental syntax 'doExpressions' isn't currently enabled (1:2):",
             );
             expect(err.message).toMatch(
-              "Add @babel/plugin-proposal-do-expressions (https://git.io/vb4S3) to the " +
+              "Add @babel/plugin-proposal-do-expressions (https://github.com/babel/babel/tree/main/packages/babel-plugin-proposal-do-expressions) to the " +
                 "'plugins' section of your Babel config to enable transformation.",
             );
             resolve();

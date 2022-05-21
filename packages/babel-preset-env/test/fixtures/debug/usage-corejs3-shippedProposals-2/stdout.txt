@@ -12,7 +12,7 @@ Using modules transform: auto
 Using plugins:
   proposal-class-static-block { chrome < 94, firefox < 93, ie }
   proposal-private-property-in-object { chrome < 91, firefox < 90, ie }
-  proposal-class-properties { chrome < 84, firefox < 90, ie }
+  proposal-class-properties { chrome < 74, firefox < 90, ie }
   proposal-private-methods { chrome < 84, firefox < 90, ie }
   proposal-numeric-separator { chrome < 75, firefox < 70, ie }
   proposal-logical-assignment-operators { chrome < 85, firefox < 79, ie }
@@ -50,6 +50,7 @@ Using plugins:
   proposal-export-namespace-from { chrome < 72, firefox < 80, ie }
   transform-modules-commonjs
   proposal-dynamic-import
+  syntax-import-assertions
 corejs3: `DEBUG` option
 
 Using targets: {
@@ -62,14 +63,14 @@ Using polyfills with `usage-global` method:
 regenerator: `DEBUG` option
 
 Using targets: {
-  "android": "94",
-  "chrome": "91",
-  "edge": "92",
-  "firefox": "78",
+  "android": "99",
+  "chrome": "97",
+  "edge": "98",
+  "firefox": "91",
   "ios": "12.2",
-  "opera": "78",
-  "safari": "13.1",
-  "samsung": "14"
+  "opera": "82",
+  "safari": "14.1",
+  "samsung": "15"
 }
 
 Using polyfills with `usage-global` method:
@@ -81,5 +82,4 @@ The corejs3 polyfill added the following polyfills:
   web.dom-collections.iterator { "chrome":"52", "firefox":"50", "ie":"11" }
 
 [<CWD>/packages/babel-preset-env/test/fixtures/debug/usage-corejs3-shippedProposals-2/input.js]
-The regenerator polyfill added the following polyfills:
-  regenerator-runtime
+Based on your code and targets, the regenerator polyfill did not add any polyfill.

@@ -89,10 +89,7 @@ if (process.env.BABEL_8_BREAKING) {
       return "uncolored";
     }
 
-    if (
-      token.type === "Invalid" &&
-      (token.value === "@" || token.value === "#")
-    ) {
+    if (token.type === "Invalid" && token.value === "@") {
       return "punctuator";
     }
 
@@ -176,7 +173,7 @@ if (process.env.BABEL_8_BREAKING) {
 
       if (
         JSX_TAG.test(token.value) &&
-        (text[offset - 1] === "<" || text.substr(offset - 2, 2) == "</")
+        (text[offset - 1] === "<" || text.slice(offset - 2, offset) == "</")
       ) {
         return "jsxIdentifier";
       }
@@ -262,7 +259,7 @@ export function getChalk(options: Options) {
  * Highlight `code`.
  */
 export default function highlight(code: string, options: Options = {}): string {
-  if (shouldHighlight(options)) {
+  if (code !== "" && shouldHighlight(options)) {
     const chalk = getChalk(options);
     const defs = getDefs(chalk);
     return highlightTokens(defs, code);

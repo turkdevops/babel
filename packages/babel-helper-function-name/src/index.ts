@@ -1,10 +1,10 @@
-import getFunctionArity from "@babel/helper-get-function-arity";
 import template from "@babel/template";
 import {
   NOT_LOCAL_BINDING,
   cloneNode,
   identifier,
   isAssignmentExpression,
+  isAssignmentPattern,
   isFunction,
   isIdentifier,
   isLiteral,
@@ -12,11 +12,19 @@ import {
   isObjectMethod,
   isObjectProperty,
   isRegExpLiteral,
+  isRestElement,
   isTemplateLiteral,
   isVariableDeclarator,
   toBindingIdentifierName,
 } from "@babel/types";
 import type * as t from "@babel/types";
+
+function getFunctionArity(node: t.Function): number {
+  const count = node.params.findIndex(
+    param => isAssignmentPattern(param) || isRestElement(param),
+  );
+  return count === -1 ? node.params.length : count;
+}
 
 const buildPropertyMethodAssignmentWrapper = template(`
   (function (FUNCTION_KEY) {
@@ -172,6 +180,7 @@ function visit(node, name, scope) {
 /**
  * @param {NodePath} param0
  * @param {Boolean} localBinding whether a name could shadow a self-reference (e.g. converting arrow function)
+ * @param {Boolean} supportUnicodeId whether a target support unicodeId or not
  */
 export default function (
   {
@@ -181,6 +190,7 @@ export default function (
     id,
   }: { node: any; parent?: any; scope: any; id?: any },
   localBinding = false,
+  supportUnicodeId = false,
 ) {
   // has an `id` so we don't need to infer one
   if (node.id) return;
@@ -224,6 +234,10 @@ export default function (
   }
 
   if (name === undefined) {
+    return;
+  }
+
+  if (!supportUnicodeId && isFunction(node) && /[\uD800-\uDFFF]/.test(name)) {
     return;
   }
 

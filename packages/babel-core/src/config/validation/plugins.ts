@@ -11,6 +11,10 @@ import type {
   OptionPath,
   RootPath,
 } from "./option-assertions";
+import type { ParserOptions } from "@babel/parser";
+import type { Visitor } from "@babel/traverse";
+import type { ValidatedOptions } from "./options";
+import type { File, PluginPass } from "../../..";
 
 // Note: The casts here are just meant to be static assertions to make sure
 // that the assertion functions actually assert that the value's type matches
@@ -31,7 +35,7 @@ const VALIDATORS: ValidatorSet = {
   >,
 };
 
-function assertVisitorMap(loc: OptionPath, value: unknown): VisitorMap {
+function assertVisitorMap(loc: OptionPath, value: unknown): Visitor {
   const obj = assertObject(loc, value);
   if (obj) {
     Object.keys(obj).forEach(prop => assertVisitorHandler(prop, obj[prop]));
@@ -45,7 +49,7 @@ function assertVisitorMap(loc: OptionPath, value: unknown): VisitorMap {
       );
     }
   }
-  return obj as VisitorMap;
+  return obj as Visitor;
 }
 
 function assertVisitorHandler(
@@ -74,17 +78,16 @@ type VisitorHandler =
       exit?: Function;
     };
 
-export type VisitorMap = {
-  [x: string]: VisitorHandler;
-};
-
-export type PluginObject = {
+export type PluginObject<S extends PluginPass = PluginPass> = {
   name?: string;
-  manipulateOptions?: (options: unknown, parserOpts: unknown) => void;
-  pre?: Function;
-  post?: Function;
+  manipulateOptions?: (
+    options: ValidatedOptions,
+    parserOpts: ParserOptions,
+  ) => void;
+  pre?: (this: S, file: File) => void;
+  post?: (this: S, file: File) => void;
   inherits?: Function;
-  visitor?: VisitorMap;
+  visitor?: Visitor<S>;
   parserOverride?: Function;
   generatorOverride?: Function;
 };

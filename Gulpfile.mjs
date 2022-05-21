@@ -12,14 +12,14 @@ import { rollup } from "rollup";
 import { babel as rollupBabel } from "@rollup/plugin-babel";
 import rollupCommonJs from "@rollup/plugin-commonjs";
 import rollupJson from "@rollup/plugin-json";
-import rollupNodePolyfills from "rollup-plugin-node-polyfills";
+import rollupPolyfillNode from "rollup-plugin-polyfill-node";
 import rollupNodeResolve from "@rollup/plugin-node-resolve";
 import rollupReplace from "@rollup/plugin-replace";
 import { terser as rollupTerser } from "rollup-plugin-terser";
-import _rollupDts from "rollup-plugin-dts";
-const { default: rollupDts } = _rollupDts;
+import rollupDts from "rollup-plugin-dts";
 import { Worker as JestWorker } from "jest-worker";
 import glob from "glob";
+import { resolve as importMetaResolve } from "import-meta-resolve";
 
 import rollupBabelSource from "./scripts/rollup-plugin-babel-source.js";
 import formatCode from "./scripts/utils/formatCode.js";
@@ -136,7 +136,7 @@ async function generateTypeHelpers(helperKind, filename = "index.ts") {
  * @typedef {("asserts" | "validators" | "virtual-types")} TraverseHelperKind
  * @param {TraverseHelperKind} helperKind
  */
-async function generateTraverseHelpers(helperKind) {
+function generateTraverseHelpers(helperKind) {
   return generateHelpers(
     `./packages/babel-traverse/scripts/generators/${helperKind}.js`,
     `./packages/babel-traverse/src/path/generated/`,
@@ -146,6 +146,13 @@ async function generateTraverseHelpers(helperKind) {
 }
 
 async function generateRuntimeHelpers() {
+  await generateHelpers(
+    `./packages/babel-helpers/scripts/generate-regenerator-runtime.js`,
+    `./packages/babel-helpers/src/helpers`,
+    "regeneratorRuntime.js",
+    "@babel/helpers -> regeneratorRuntime"
+  );
+
   return generateHelpers(
     `./packages/babel-helpers/scripts/generate-helpers.js`,
     `./packages/babel-helpers/src/`,
@@ -340,12 +347,11 @@ function buildRollup(packages, targetBrowsers) {
               include: [
                 /node_modules/,
                 "packages/babel-runtime/regenerator/**",
+                "packages/babel-runtime/helpers/*.js",
                 "packages/babel-preset-env/data/*.js",
                 // Rollup doesn't read export maps, so it loads the cjs fallback
                 "packages/babel-compat-data/*.js",
                 "packages/*/src/**/*.cjs",
-                // See the comment in this file for the reason to include it
-                "packages/babel-standalone/src/dynamic-require-entrypoint.cjs",
               ],
               dynamicRequireTargets: [
                 // https://github.com/mathiasbynens/regexpu-core/blob/ffd8fff2e31f4597f6fdfee75d5ac1c5c8111ec3/rewrite-pattern.js#L48
@@ -357,7 +363,7 @@ function buildRollup(packages, targetBrowsers) {
                 ) + "/**/*.js",
               ],
               // Never delegate to the native require()
-              ignoreDynamicRequires: true,
+              ignoreDynamicRequires: false,
               // Align with the Node.js behavior
               defaultIsModuleExports: true,
             }),
@@ -367,6 +373,7 @@ function buildRollup(packages, targetBrowsers) {
               babelHelpers: "bundled",
               extends: "./babel.config.js",
               extensions: [".ts", ".js", ".mjs", ".cjs"],
+              ignore: ["packages/babel-runtime/helpers/*.js"],
             }),
             rollupNodeResolve({
               extensions: [".ts", ".js", ".mjs", ".cjs", ".json"],
@@ -378,7 +385,7 @@ function buildRollup(packages, targetBrowsers) {
             }),
             rollupJson(),
             targetBrowsers &&
-              rollupNodePolyfills({
+              rollupPolyfillNode({
                 sourceMap: sourcemap,
                 include: "**/*.{js,cjs,ts}",
               }),
@@ -461,9 +468,11 @@ function copyDts(packages) {
 
 const libBundles = [
   "packages/babel-parser",
+  "packages/babel-plugin-proposal-destructuring-private",
   "packages/babel-plugin-proposal-object-rest-spread",
   "packages/babel-plugin-proposal-optional-chaining",
   "packages/babel-preset-react",
+  "packages/babel-plugin-transform-destructuring",
   "packages/babel-preset-typescript",
   "packages/babel-helper-member-expression-to-functions",
   "packages/babel-plugin-bugfix-v8-spread-parameters-in-optional-chaining",
@@ -527,18 +536,60 @@ gulp.task(
 
 gulp.task("build-babel", () => buildBabel(true, /* exclude */ libBundles));
 
+gulp.task("build-vendor", async () => {
+  const input = fileURLToPath(
+    await importMetaResolve("import-meta-resolve", import.meta.url)
+  );
+  const output = "./packages/babel-core/src/vendor/import-meta-resolve.js";
+
+  const bundle = await rollup({
+    input,
+    onwarn(warning, warn) {
+      if (warning.code === "CIRCULAR_DEPENDENCY") return;
+      warn(warning);
+    },
+    plugins: [
+      rollupCommonJs({ defaultIsModuleExports: true }),
+      rollupNodeResolve({
+        extensions: [".js", ".mjs", ".cjs", ".json"],
+        preferBuiltins: true,
+      }),
+    ],
+  });
+
+  await bundle.write({
+    file: output,
+    format: "es",
+    sourcemap: false,
+    exports: "named",
+    banner: String.raw`
+/****************************************************************************\
+ *                         NOTE FROM BABEL AUTHORS                          *
+ * This file is inlined from https://github.com/wooorm/import-meta-resolve, *
+ * because we need to compile it to CommonJS.                               *
+\****************************************************************************/
+
+/*
+${fs.readFileSync(path.join(path.dirname(input), "license"), "utf8")}*/
+`,
+  });
+
+  fs.writeFileSync(
+    output.replace(".js", ".d.ts"),
+    `export function resolve(specifier: stirng, parent: string): Promise<string>;`
+  );
+});
+
 gulp.task(
   "build",
   gulp.series(
-    gulp.parallel("build-rollup", "build-babel", "generate-runtime-helpers"),
-    gulp.parallel(
-      "generate-standalone",
-      gulp.series(
-        "generate-type-helpers",
-        // rebuild @babel/types since type-helpers may be changed
-        "build-babel"
-      )
-    )
+    "build-vendor",
+    gulp.parallel("build-rollup", "build-babel"),
+    gulp.parallel("generate-type-helpers", "generate-runtime-helpers"),
+    // rebuild @babel/types and @babel/helpers since
+    // type-helpers and generated helpers may be changed
+    "build-babel",
+    "generate-standalone"
   )
 );
 
@@ -552,9 +603,11 @@ gulp.task("build-no-bundle-watch", () => buildBabel(false));
 gulp.task(
   "build-dev",
   gulp.series(
+    "build-vendor",
     "build-no-bundle",
     gulp.parallel(
       "generate-standalone",
+      "generate-runtime-helpers",
       gulp.series(
         "generate-type-helpers",
         // rebuild @babel/types since type-helpers may be changed

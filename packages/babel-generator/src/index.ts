@@ -1,8 +1,9 @@
 import SourceMap from "./source-map";
 import Printer from "./printer";
 import type * as t from "@babel/types";
-
+import type { Opts as jsescOptions } from "jsesc";
 import type { Format } from "./printer";
+import type { DecodedSourceMap, Mapping } from "@jridgewell/gen-mapping";
 
 /**
  * Babel's code generator, turns an ast into code, maintaining sourcemaps,
@@ -10,7 +11,15 @@ import type { Format } from "./printer";
  */
 
 class Generator extends Printer {
-  constructor(ast: t.Node, opts: { sourceMaps?: boolean } = {}, code) {
+  constructor(
+    ast: t.Node,
+    opts: {
+      sourceFileName?: string;
+      sourceMaps?: boolean;
+      sourceRoot?: string;
+    } = {},
+    code,
+  ) {
     const format = normalizeOptions(code, opts);
     const map = opts.sourceMaps ? new SourceMap(opts, code) : null;
     super(format, map);
@@ -186,24 +195,17 @@ export interface GeneratorOptions {
   /**
    * Options for outputting jsesc representation.
    */
-  jsescOption?: {
-    /**
-     * The type of quote to use in the output. If omitted, autodetects based on `ast.tokens`.
-     */
-    quotes?: "single" | "double";
+  jsescOption?: jsescOptions;
 
-    /**
-     * When enabled, the output is a valid JavaScript string literal wrapped in quotes. The type of quotes can be specified through the quotes setting.
-     * Defaults to `true`.
-     */
-    wrap?: boolean;
-  };
-
+  /**
+   * For use with the recordAndTuple token.
+   */
+  recordAndTupleSyntaxType?: "hash" | "bar";
   /**
    * For use with the Hack-style pipe operator.
    * Changes what token is used for pipe bodies’ topic references.
    */
-  topicToken?: "^" | "%" | "#";
+  topicToken?: "^^" | "@@" | "^" | "%" | "#";
 }
 
 export interface GeneratorResult {
@@ -217,6 +219,8 @@ export interface GeneratorResult {
     mappings: string;
     file: string;
   } | null;
+  decodedMap: DecodedSourceMap | undefined;
+  rawMappings: Mapping[] | undefined;
 }
 
 /**

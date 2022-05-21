@@ -2,6 +2,32 @@ import type SourceMap from "./source-map";
 import type * as t from "@babel/types";
 import * as charcodes from "charcodes";
 
+type Pos = {
+  line: number;
+  column: number;
+};
+type Loc = {
+  start?: Pos;
+  end?: Pos;
+  identifierName?: string;
+  filename?: string;
+};
+type SourcePos = {
+  identifierName: string | undefined;
+  line: number | undefined;
+  column: number | undefined;
+  filename: string | undefined;
+};
+
+function SourcePos(): SourcePos {
+  return {
+    identifierName: undefined,
+    line: undefined,
+    column: undefined,
+    filename: undefined,
+  };
+}
+
 const SPACES_RE = /^[ \t]+$/;
 export default class Buffer {
   constructor(map?: SourceMap | null) {
@@ -9,30 +35,16 @@ export default class Buffer {
   }
 
   _map: SourceMap = null;
-  _buf: string = "";
-  _last: number = 0;
-  _queue: Array<
-    [
-      str: string,
-      line: number,
-      column: number,
-      identifierName: string | null,
-      filename: string | null | undefined,
-      force: boolean | undefined,
-    ]
-  > = [];
+  _buf = "";
+  _last = 0;
+  _queue: Parameters<Buffer["_append"]>[] = [];
 
-  _position: any = {
+  _position = {
     line: 1,
     column: 0,
   };
-  _sourcePosition: any = {
-    identifierName: null,
-    line: null,
-    column: null,
-    filename: null,
-  };
-  _disallowedPop: any | null = null;
+  _sourcePosition = SourcePos();
+  _disallowedPop: SourcePos | null = null;
 
   /**
    * Get the final string output from the buffer, along with the sourcemap if one exists.
@@ -46,24 +58,24 @@ export default class Buffer {
       // Whatever trim is used here should not execute a regex against the
       // source string since it may be arbitrarily large after all transformations
       code: this._buf.trimRight(),
-      map: null,
-      rawMappings: map?.getRawMappings(),
-    };
+      // Decoded sourcemap is free to generate.
+      decodedMap: map?.getDecoded(),
 
-    if (map) {
-      // The `.map` property is lazy to allow callers to use the raw mappings
-      // without any overhead
-      Object.defineProperty(result, "map", {
-        configurable: true,
-        enumerable: true,
-        get() {
-          return (this.map = map.get());
-        },
-        set(value) {
-          Object.defineProperty(this, "map", { value, writable: true });
-        },
-      });
-    }
+      // Encoding the sourcemap is moderately CPU expensive.
+      get map() {
+        return (result.map = map ? map.get() : null);
+      },
+      set map(value) {
+        Object.defineProperty(result, "map", { value, writable: true });
+      },
+      // Retrieving the raw mappings is very memory intensive.
+      get rawMappings() {
+        return (result.rawMappings = map?.getRawMappings());
+      },
+      set rawMappings(value) {
+        Object.defineProperty(result, "rawMappings", { value, writable: true });
+      },
+    };
 
     return result;
   }
@@ -74,15 +86,13 @@ export default class Buffer {
 
   append(str: string): void {
     this._flush();
-    const { line, column, filename, identifierName, force } =
-      this._sourcePosition;
-    this._append(str, line, column, identifierName, filename, force);
+    const { line, column, filename, identifierName } = this._sourcePosition;
+    this._append(str, line, column, identifierName, filename);
   }
 
   /**
    * Add a string to the buffer than can be reverted.
    */
-
   queue(str: string): void {
     // Drop trailing spaces when a newline is inserted.
     if (str === "\n") {
@@ -91,20 +101,19 @@ export default class Buffer {
       }
     }
 
-    const { line, column, filename, identifierName, force } =
-      this._sourcePosition;
-    this._queue.unshift([str, line, column, identifierName, filename, force]);
+    const { line, column, filename, identifierName } = this._sourcePosition;
+    this._queue.unshift([str, line, column, identifierName, filename]);
+  }
+
+  /**
+   * Same as queue, but this indentation will never have a sourcmap marker.
+   */
+  queueIndentation(str: string): void {
+    this._queue.unshift([str, undefined, undefined, undefined, undefined]);
   }
 
   _flush(): void {
-    let item: [
-      string,
-      number,
-      number,
-      string | null | undefined,
-      string | null | undefined,
-      boolean | undefined,
-    ];
+    let item: Parameters<Buffer["_append"]>;
     while ((item = this._queue.pop())) {
       this._append(...item);
     }
@@ -112,11 +121,10 @@ export default class Buffer {
 
   _append(
     str: string,
-    line: number,
-    column: number,
-    identifierName?: string | null,
-    filename?: string | null,
-    force?: boolean,
+    line: number | undefined,
+    column: number | undefined,
+    identifierName: string | undefined,
+    filename: string | undefined,
   ): void {
     this._buf += str;
     this._last = str.charCodeAt(str.length - 1);
@@ -131,7 +139,7 @@ export default class Buffer {
     // If the string starts with a newline char, then adding a mark is redundant.
     // This catches both "no newlines" and "newline after several chars".
     if (i !== 0) {
-      this._mark(line, column, identifierName, filename, force);
+      this._mark(line, column, identifierName, filename);
     }
 
     // Now, find each reamining newline char in the string.
@@ -143,7 +151,7 @@ export default class Buffer {
       // We mark the start of each line, which happens directly after this newline char
       // unless this is the last char.
       if (last < str.length) {
-        this._mark(++line, 0, identifierName, filename, force);
+        this._mark(++line, 0, identifierName, filename);
       }
       i = str.indexOf("\n", last);
     }
@@ -151,21 +159,12 @@ export default class Buffer {
   }
 
   _mark(
-    line: number,
-    column: number,
-    identifierName?: string | null,
-    filename?: string | null,
-    force?: boolean,
+    line: number | undefined,
+    column: number | undefined,
+    identifierName: string | undefined,
+    filename: string | undefined,
   ): void {
-    this._map?.mark(
-      this._position.line,
-      this._position.column,
-      line,
-      column,
-      identifierName,
-      filename,
-      force,
-    );
+    this._map?.mark(this._position, line, column, identifierName, filename);
   }
 
   removeTrailingNewline(): void {
@@ -243,11 +242,7 @@ export default class Buffer {
    * over "();", where previously it would have been a single mapping.
    */
   exactSource(loc: any, cb: () => void) {
-    // In cases where parent expressions start at the same locations as the
-    // identifier itself, the current active location could already be the
-    // start of this range. We use 'force' here to explicitly start a new
-    // mapping range for this new token.
-    this.source("start", loc, true /* force */);
+    this.source("start", loc);
 
     cb();
 
@@ -267,12 +262,12 @@ export default class Buffer {
    * will be given this position in the sourcemap.
    */
 
-  source(prop: string, loc: t.SourceLocation, force?: boolean): void {
+  source(prop: string, loc: t.SourceLocation): void {
     if (prop && !loc) return;
 
     // Since this is called extremely often, we re-use the same _sourcePosition
     // object for the whole lifetime of the buffer.
-    this._normalizePosition(prop, loc, this._sourcePosition, force);
+    this._normalizePosition(prop, loc, this._sourcePosition);
   }
 
   /**
@@ -295,23 +290,16 @@ export default class Buffer {
     cb();
 
     if (
-      // If the current active position is forced, we only want to reactivate
-      // the old position if it is different from the newest position.
-      (!this._sourcePosition.force ||
-        this._sourcePosition.line !== originalLine ||
-        this._sourcePosition.column !== originalColumn ||
-        this._sourcePosition.filename !== originalFilename) &&
       // Verify if reactivating this specific position has been disallowed.
-      (!this._disallowedPop ||
-        this._disallowedPop.line !== originalLine ||
-        this._disallowedPop.column !== originalColumn ||
-        this._disallowedPop.filename !== originalFilename)
+      !this._disallowedPop ||
+      this._disallowedPop.line !== originalLine ||
+      this._disallowedPop.column !== originalColumn ||
+      this._disallowedPop.filename !== originalFilename
     ) {
       this._sourcePosition.line = originalLine;
       this._sourcePosition.column = originalColumn;
       this._sourcePosition.filename = originalFilename;
       this._sourcePosition.identifierName = originalIdentifierName;
-      this._sourcePosition.force = false;
       this._disallowedPop = null;
     }
   }
@@ -324,42 +312,21 @@ export default class Buffer {
   _disallowPop(prop: string, loc: t.SourceLocation) {
     if (prop && !loc) return;
 
-    this._disallowedPop = this._normalizePosition(prop, loc);
+    this._disallowedPop = this._normalizePosition(prop, loc, SourcePos());
   }
 
-  _normalizePosition(prop: string, loc: any, targetObj?: any, force?: boolean) {
+  _normalizePosition(
+    prop: string,
+    loc: Loc | undefined | null,
+    targetObj: SourcePos,
+  ) {
     const pos = loc ? loc[prop] : null;
 
-    if (targetObj === undefined) {
-      // Initialize with fields so that the object doesn't change shape.
-      targetObj = {
-        identifierName: null,
-        line: null,
-        column: null,
-        filename: null,
-        force: false,
-      };
-    }
-
-    const origLine = targetObj.line;
-    const origColumn = targetObj.column;
-    const origFilename = targetObj.filename;
-
     targetObj.identifierName =
-      (prop === "start" && loc?.identifierName) || null;
+      (prop === "start" && loc?.identifierName) || undefined;
     targetObj.line = pos?.line;
     targetObj.column = pos?.column;
     targetObj.filename = loc?.filename;
-
-    // We want to skip reassigning `force` if we're re-setting the same position.
-    if (
-      force ||
-      targetObj.line !== origLine ||
-      targetObj.column !== origColumn ||
-      targetObj.filename !== origFilename
-    ) {
-      targetObj.force = force;
-    }
 
     return targetObj;
   }

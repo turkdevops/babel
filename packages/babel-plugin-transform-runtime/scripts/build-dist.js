@@ -153,11 +153,11 @@ function writeHelpers(runtimeName, { corejs } = {}) {
     // Node.js versions >=13.0.0, <13.7.0 support the `exports` field but
     // not conditional exports (`require`/`node`/`default`)
     // We can specify exports with an array of fallbacks:
-    // - Node.js >=13.7.0 and bundlers will succesfully load the first
+    // - Node.js >=13.7.0 and bundlers will successfully load the first
     //   array entry:
     //    * Node.js will always load the CJS file
     //    * Modern tools when using "import" will load the ESM file
-    //    * Everything else (old tools, or requrie() in tools) will
+    //    * Everything else (old tools, or require() in tools) will
     //      load the CJS file
     // - Node.js 13.2-13.7 will ignore the "node" and "import" conditions,
     //   will fallback to "default" and load the CJS file
@@ -237,37 +237,34 @@ function buildHelper(
 
   return babel.transformFromAst(tree, null, {
     filename: helperFilename,
-    presets: [
-      [
-        "@babel/preset-env",
-        { modules: false, exclude: ["@babel/plugin-transform-typeof-symbol"] },
-      ],
-    ],
+    presets: [["@babel/preset-env", { modules: false }]],
     plugins: [
       [transformRuntime, { corejs, version: runtimeVersion }],
       buildRuntimeRewritePlugin(runtimeName, helperName),
       esm ? null : addDefaultCJSExport,
     ].filter(Boolean),
-    overrides: [
-      {
-        exclude: /typeof/,
-        plugins: ["@babel/plugin-transform-typeof-symbol"],
-      },
-    ],
   }).code;
 }
 
 function buildRuntimeRewritePlugin(runtimeName, helperName) {
   /**
-   * rewrite helpers imports to runtime imports
+   * Rewrite helper imports to load the adequate module format version
    * @example
    * adjustImportPath(ast`"setPrototypeOf"`)
-   * // returns ast`"@babel/runtime/helpers/esm/setPrototypeOf"`
-   * @param {*} node The string literal contains import path
+   * // returns ast`"./setPrototypeOf"`
+   * @example
+   * adjustImportPath(ast`"@babel/runtime/helpers/typeof"`)
+   * // returns ast`"./typeof"`
+   * @param {*} node The string literal that contains the import path
    */
   function adjustImportPath(node) {
-    if (helpers.list.includes(node.value)) {
-      node.value = `./${node.value}.js`;
+    const helpersPath = path.posix.join(runtimeName, "helpers");
+    const helper = node.value.startsWith(helpersPath)
+      ? path.basename(node.value)
+      : node.value;
+
+    if (helpers.list.includes(helper)) {
+      node.value = `./${helper}.js`;
     }
   }
 

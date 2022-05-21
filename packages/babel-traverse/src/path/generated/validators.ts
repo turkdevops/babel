@@ -7,6 +7,7 @@ import NodePath from "../index";
 import type { VirtualTypeAliases } from "./virtual-types";
 
 export interface NodePathValidators {
+  isAccessor(opts?: object): this is NodePath<t.Accessor>;
   isAnyTypeAnnotation(opts?: object): this is NodePath<t.AnyTypeAnnotation>;
   isArgumentPlaceholder(opts?: object): this is NodePath<t.ArgumentPlaceholder>;
   isArrayExpression(opts?: object): this is NodePath<t.ArrayExpression>;
@@ -38,6 +39,9 @@ export interface NodePathValidators {
   isCallExpression(opts?: object): this is NodePath<t.CallExpression>;
   isCatchClause(opts?: object): this is NodePath<t.CatchClause>;
   isClass(opts?: object): this is NodePath<t.Class>;
+  isClassAccessorProperty(
+    opts?: object,
+  ): this is NodePath<t.ClassAccessorProperty>;
   isClassBody(opts?: object): this is NodePath<t.ClassBody>;
   isClassDeclaration(opts?: object): this is NodePath<t.ClassDeclaration>;
   isClassExpression(opts?: object): this is NodePath<t.ClassExpression>;
@@ -325,6 +329,9 @@ export interface NodePathValidators {
   isTSIndexSignature(opts?: object): this is NodePath<t.TSIndexSignature>;
   isTSIndexedAccessType(opts?: object): this is NodePath<t.TSIndexedAccessType>;
   isTSInferType(opts?: object): this is NodePath<t.TSInferType>;
+  isTSInstantiationExpression(
+    opts?: object,
+  ): this is NodePath<t.TSInstantiationExpression>;
   isTSInterfaceBody(opts?: object): this is NodePath<t.TSInterfaceBody>;
   isTSInterfaceDeclaration(
     opts?: object,
@@ -437,7 +444,7 @@ export interface NodePathValidators {
   isNumericLiteralTypeAnnotation(
     opts?: object,
   ): this is NodePath<VirtualTypeAliases["NumericLiteralTypeAnnotation"]>;
-  isPure(opts?: object): boolean;
+  isPure(constantsOnly?: boolean): boolean;
   isReferenced(opts?: object): boolean;
   isReferencedIdentifier(
     opts?: object,

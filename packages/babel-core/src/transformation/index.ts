@@ -3,7 +3,7 @@ import type * as t from "@babel/types";
 type SourceMap = any;
 import type { Handler } from "gensync";
 
-import type { ResolvedConfig, PluginPasses } from "../config";
+import type { ResolvedConfig, Plugin, PluginPasses } from "../config";
 
 import PluginPass from "./plugin-pass";
 import loadBlockHoistPlugin from "./block-hoist-plugin";
@@ -12,6 +12,8 @@ import normalizeFile from "./normalize-file";
 
 import generateCode from "./file/generate";
 import type File from "./file/file";
+
+import { flattenToSet } from "../config/helpers/deep-array";
 
 export type FileResultCallback = {
   (err: Error, file: null): any;
@@ -25,6 +27,7 @@ export type FileResult = {
   code: string | null;
   map: SourceMap | null;
   sourceType: "string" | "module";
+  externalDependencies: Set<string>;
 };
 
 export function* run(
@@ -70,12 +73,13 @@ export function* run(
     code: outputCode === undefined ? null : outputCode,
     map: outputMap === undefined ? null : outputMap,
     sourceType: file.ast.program.sourceType,
+    externalDependencies: flattenToSet(config.externalDependencies),
   };
 }
 
 function* transformFile(file: File, pluginPasses: PluginPasses): Handler<void> {
   for (const pluginPairs of pluginPasses) {
-    const passPairs = [];
+    const passPairs: [Plugin, PluginPass][] = [];
     const passes = [];
     const visitors = [];
 

@@ -3,6 +3,7 @@ import type NodePath from "../path";
 import traverse from "../index";
 import type { TraverseOptions } from "../index";
 import Binding from "./binding";
+import type { BindingKind } from "./binding";
 import globals from "globals";
 import {
   NOT_LOCAL_BINDING,
@@ -41,6 +42,12 @@ import {
   unaryExpression,
   variableDeclaration,
   variableDeclarator,
+  isRecordExpression,
+  isTupleExpression,
+  isObjectProperty,
+  isTopicReference,
+  isMetaProperty,
+  isPrivateName,
 } from "@babel/types";
 import type * as t from "@babel/types";
 import { scope as scopeCache } from "../cache";
@@ -418,10 +425,10 @@ export default class Scope {
     let parent,
       path = this.path;
     do {
-      // Skip method scope if coming from inside computed key
-      const isKey = path.key === "key";
+      // Skip method scope if coming from inside computed key or decorator expression
+      const shouldSkip = path.key === "key" || path.listKey === "decorators";
       path = path.parentPath;
-      if (isKey && path.isMethod()) path = path.parentPath;
+      if (shouldSkip && path.isMethod()) path = path.parentPath;
       if (path && path.isScope()) parent = path;
     } while (path && !parent);
 
@@ -534,7 +541,7 @@ export default class Scope {
    */
 
   isStatic(node: t.Node): boolean {
-    if (isThisExpression(node) || isSuper(node)) {
+    if (isThisExpression(node) || isSuper(node) || isTopicReference(node)) {
       return true;
     }
 
@@ -569,7 +576,7 @@ export default class Scope {
 
   checkBlockScopedCollisions(
     local: Binding,
-    kind: string,
+    kind: BindingKind,
     name: string,
     id: any,
   ) {
@@ -587,7 +594,7 @@ export default class Scope {
       local.kind === "const" ||
       local.kind === "module" ||
       // don't allow a local of param with a kind of let
-      (local.kind === "param" && (kind === "let" || kind === "const"));
+      (local.kind === "param" && kind === "const");
 
     if (duplicate) {
       throw this.hub.buildError(
@@ -633,7 +640,11 @@ export default class Scope {
   }
 
   // TODO: (Babel 8) Split i in two parameters, and use an object of flags
-  toArray(node: t.Node, i?: number | boolean, arrayLikeIsIterable?: boolean) {
+  toArray(
+    node: t.Node,
+    i?: number | boolean,
+    arrayLikeIsIterable?: boolean | void,
+  ) {
     if (isIdentifier(node)) {
       const binding = this.getBinding(node.name);
       if (binding?.constant && binding.path.isGenericType("Array")) {
@@ -822,8 +833,18 @@ export default class Scope {
       if (!binding) return false;
       if (constantsOnly) return binding.constant;
       return true;
+    } else if (
+      isThisExpression(node) ||
+      isMetaProperty(node) ||
+      isTopicReference(node) ||
+      isPrivateName(node)
+    ) {
+      return true;
     } else if (isClass(node)) {
       if (node.superClass && !this.isPure(node.superClass, constantsOnly)) {
+        return false;
+      }
+      if (node.decorators?.length > 0) {
         return false;
       }
       return this.isPure(node.body, constantsOnly);
@@ -837,24 +858,34 @@ export default class Scope {
         this.isPure(node.left, constantsOnly) &&
         this.isPure(node.right, constantsOnly)
       );
-    } else if (isArrayExpression(node)) {
+    } else if (isArrayExpression(node) || isTupleExpression(node)) {
       for (const elem of node.elements) {
-        if (!this.isPure(elem, constantsOnly)) return false;
+        if (elem !== null && !this.isPure(elem, constantsOnly)) return false;
       }
       return true;
-    } else if (isObjectExpression(node)) {
+    } else if (isObjectExpression(node) || isRecordExpression(node)) {
       for (const prop of node.properties) {
         if (!this.isPure(prop, constantsOnly)) return false;
       }
       return true;
     } else if (isMethod(node)) {
       if (node.computed && !this.isPure(node.key, constantsOnly)) return false;
-      if (node.kind === "get" || node.kind === "set") return false;
+      if (node.decorators?.length > 0) {
+        return false;
+      }
       return true;
     } else if (isProperty(node)) {
       // @ts-expect-error todo(flow->ts): computed in not present on private properties
       if (node.computed && !this.isPure(node.key, constantsOnly)) return false;
-      return this.isPure(node.value, constantsOnly);
+      if (node.decorators?.length > 0) {
+        return false;
+      }
+      if (isObjectProperty(node) || node.static) {
+        if (node.value !== null && !this.isPure(node.value, constantsOnly)) {
+          return false;
+        }
+      }
+      return true;
     } else if (isUnaryExpression(node)) {
       return this.isPure(node.argument, constantsOnly);
     } else if (isTaggedTemplateExpression(node)) {
@@ -988,7 +1019,9 @@ export default class Scope {
   }) {
     let path = this.path;
 
-    if (!path.isBlockStatement() && !path.isProgram()) {
+    if (path.isPattern()) {
+      path = this.getPatternParent().path;
+    } else if (!path.isBlockStatement() && !path.isProgram()) {
       path = this.getBlockParent().path;
     }
 
@@ -1019,8 +1052,8 @@ export default class Scope {
     }
 
     const declarator = variableDeclarator(opts.id, opts.init);
-    declarPath.node.declarations.push(declarator);
-    this.registerBinding(kind, declarPath.get("declarations").pop());
+    const len = declarPath.node.declarations.push(declarator);
+    path.scope.registerBinding(kind, declarPath.get("declarations")[len - 1]);
   }
 
   /**
@@ -1063,6 +1096,23 @@ export default class Scope {
         return scope;
       }
     } while ((scope = scope.parent));
+    throw new Error(
+      "We couldn't find a BlockStatement, For, Switch, Function, Loop or Program...",
+    );
+  }
+
+  /**
+   * Walk up from a pattern scope (function param initializer) until we hit a non-pattern scope,
+   * then returns its block parent
+   * @returns An ancestry scope whose path is a block parent
+   */
+  getPatternParent() {
+    let scope: Scope = this;
+    do {
+      if (!scope.path.isPattern()) {
+        return scope.getBlockParent();
+      }
+    } while ((scope = scope.parent.parent));
     throw new Error(
       "We couldn't find a BlockStatement, For, Switch, Function, Loop or Program...",
     );
@@ -1138,6 +1188,13 @@ export default class Scope {
         } else {
           return binding;
         }
+      } else if (
+        !binding &&
+        name === "arguments" &&
+        scope.path.isFunction() &&
+        !scope.path.isArrowFunctionExpression()
+      ) {
+        break;
       }
       previousPath = scope.path;
     } while ((scope = scope.parent));

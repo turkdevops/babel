@@ -1,6 +1,6 @@
 {
   "name": "@babel/runtime-corejs2",
-  "version": "7.16.3",
+  "version": "7.18.0",
   "description": "babel's modular runtime helpers with core-js@2 polyfilling",
   "license": "MIT",
   "publishConfig": {
@@ -14,10 +14,19 @@
   "homepage": "https://babel.dev/docs/en/next/babel-runtime-corejs2",
   "author": "The Babel Team (https://babel.dev/team)",
   "dependencies": {
-    "core-js": "^2.6.5",
+    "core-js": "^2.6.12",
     "regenerator-runtime": "^0.13.4"
   },
   "exports": {
+    "./helpers/applyDecs": [
+      {
+        "node": "./helpers/applyDecs.js",
+        "import": "./helpers/esm/applyDecs.js",
+        "default": "./helpers/applyDecs.js"
+      },
+      "./helpers/applyDecs.js"
+    ],
+    "./helpers/esm/applyDecs": "./helpers/esm/applyDecs.js",
     "./helpers/asyncIterator": [
       {
         "node": "./helpers/asyncIterator.js",
@@ -45,6 +54,15 @@
       "./helpers/objectSpread2.js"
     ],
     "./helpers/esm/objectSpread2": "./helpers/esm/objectSpread2.js",
+    "./helpers/regeneratorRuntime": [
+      {
+        "node": "./helpers/regeneratorRuntime.js",
+        "import": "./helpers/esm/regeneratorRuntime.js",
+        "default": "./helpers/regeneratorRuntime.js"
+      },
+      "./helpers/regeneratorRuntime.js"
+    ],
+    "./helpers/esm/regeneratorRuntime": "./helpers/esm/regeneratorRuntime.js",
     "./helpers/typeof": [
       {
         "node": "./helpers/typeof.js",
@@ -837,6 +855,15 @@
       "./helpers/classPrivateMethodSet.js"
     ],
     "./helpers/esm/classPrivateMethodSet": "./helpers/esm/classPrivateMethodSet.js",
+    "./helpers/identity": [
+      {
+        "node": "./helpers/identity.js",
+        "import": "./helpers/esm/identity.js",
+        "default": "./helpers/identity.js"
+      },
+      "./helpers/identity.js"
+    ],
+    "./helpers/esm/identity": "./helpers/esm/identity.js",
     "./package": "./package.json",
     "./package.json": "./package.json",
     "./regenerator": "./regenerator/index.js",

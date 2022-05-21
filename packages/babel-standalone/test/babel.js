@@ -193,7 +193,7 @@ const require = createRequire(import.meta.url);
           presets: ["env"],
         }).code;
 
-        expect(output).toMatch("regeneratorRuntime.mark(fn)");
+        expect(output).toMatch("regeneratorRuntime().mark(fn)");
       });
     });
 
@@ -255,6 +255,9 @@ const require = createRequire(import.meta.url);
             plugins: ["proposal-unicode-property-regex"],
           }),
         ).not.toThrow();
+      });
+      it("#14425 - numeric separators should be parsed correctly", () => {
+        expect(() => Babel.transform("1_1", {})).not.toThrow();
       });
     });
   },

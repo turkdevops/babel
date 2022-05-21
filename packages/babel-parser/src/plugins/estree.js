@@ -4,11 +4,33 @@ import { type TokenType } from "../tokenizer/types";
 import type Parser from "../parser";
 import type { ExpressionErrors } from "../parser/util";
 import * as N from "../types";
+import type { Node as NodeType, NodeBase, File } from "../types";
 import type { Position } from "../util/location";
-import { Errors } from "../parser/error";
+import { Errors } from "../parse-error";
+
+const { defineProperty } = Object;
+const toUnenumerable = (object, key) =>
+  defineProperty(object, key, { enumerable: false, value: object[key] });
+
+function toESTreeLocation(node: any) {
+  toUnenumerable(node.loc.start, "index");
+  toUnenumerable(node.loc.end, "index");
+
+  return node;
+}
 
 export default (superClass: Class<Parser>): Class<Parser> =>
   class extends superClass {
+    parse(): File {
+      const file = toESTreeLocation(super.parse());
+
+      if (this.options.tokens) {
+        file.tokens = file.tokens.map(toESTreeLocation);
+      }
+
+      return file;
+    }
+
     parseRegExpLiteral({ pattern, flags }): N.Node {
       let regex = null;
       try {
@@ -83,17 +105,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       stmt.expression = this.finishNodeAt(
         expression,
         "Literal",
-        directiveLiteral.end,
         directiveLiteral.loc.end,
       );
       stmt.directive = directiveLiteral.extra.raw.slice(1, -1);
 
-      return this.finishNodeAt(
-        stmt,
-        "ExpressionStatement",
-        directive.end,
-        directive.loc.end,
-      );
+      return this.finishNodeAt(stmt, "ExpressionStatement", directive.loc.end);
     }
 
     // ==================================
@@ -327,6 +343,10 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return (node: any);
     }
 
+    isValidLVal(type: string, ...rest) {
+      return type === "Property" ? "value" : super.isValidLVal(type, ...rest);
+    }
+
     isAssignable(node: N.Node, isBinding?: boolean): boolean {
       if (node != null && this.isObjectProperty(node)) {
         return this.isAssignable(node.value, isBinding);
@@ -334,23 +354,28 @@ export default (superClass: Class<Parser>): Class<Parser> =>
       return super.isAssignable(node, isBinding);
     }
 
-    toAssignable(node: N.Node, isLHS: boolean = false): N.Node {
+    toAssignable(node: N.Node, isLHS: boolean = false): void {
       if (node != null && this.isObjectProperty(node)) {
-        this.toAssignable(node.value, isLHS);
-
-        return node;
+        const { key, value } = node;
+        if (this.isPrivateName(key)) {
+          this.classScope.usePrivateName(
+            this.getPrivateNameSV(key),
+            key.loc.start,
+          );
+        }
+        this.toAssignable(value, isLHS);
+      } else {
+        super.toAssignable(node, isLHS);
       }
-
-      return super.toAssignable(node, isLHS);
     }
 
-    toAssignableObjectExpressionProp(prop: N.Node, ...args) {
+    toAssignableObjectExpressionProp(prop: N.Node) {
       if (prop.kind === "get" || prop.kind === "set") {
-        this.raise(prop.key.start, Errors.PatternHasAccessor);
+        this.raise(Errors.PatternHasAccessor, { at: prop.key });
       } else if (prop.method) {
-        this.raise(prop.key.start, Errors.PatternHasMethod);
+        this.raise(Errors.PatternHasMethod, { at: prop.key });
       } else {
-        super.toAssignableObjectExpressionProp(prop, ...args);
+        super.toAssignableObjectExpressionProp(...arguments);
       }
     }
 
@@ -470,5 +495,17 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
     isObjectMethod(node: N.Node): boolean {
       return node.method || node.kind === "get" || node.kind === "set";
+    }
+
+    finishNodeAt<T: NodeType>(node: T, type: string, endLoc: Position): T {
+      return toESTreeLocation(super.finishNodeAt(node, type, endLoc));
+    }
+
+    resetEndLocation(
+      node: NodeBase,
+      endLoc?: Position = this.state.lastTokEndLoc,
+    ): void {
+      super.resetEndLocation(node, endLoc);
+      toESTreeLocation(node);
     }
   };
