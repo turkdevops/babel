@@ -32,7 +32,7 @@ export const SHOULD_STOP = 1 << 1;
 export const SHOULD_SKIP = 1 << 2;
 
 class NodePath<T extends t.Node = t.Node> {
-  constructor(hub: HubInterface, parent: t.Node) {
+  constructor(hub: HubInterface, parent: t.ParentMaps[T["type"]]) {
     this.parent = parent;
     this.hub = hub;
     this.data = null;
@@ -41,9 +41,10 @@ class NodePath<T extends t.Node = t.Node> {
     this.scope = null;
   }
 
-  declare parent: t.Node;
+  declare parent: t.ParentMaps[T["type"]];
   declare hub: HubInterface;
-  declare data: object;
+  declare data: Record<string | symbol, unknown>;
+  // TraversalContext is configured by setContext
   declare context: TraversalContext;
   declare scope: Scope;
 
@@ -53,8 +54,10 @@ class NodePath<T extends t.Node = t.Node> {
   // this.shouldSkip = false; this.shouldStop = false; this.removed = false;
   _traverseFlags: number = 0;
   skipKeys: any = null;
-  parentPath: NodePath | null = null;
-  container: object | null | Array<any> = null;
+  parentPath: t.ParentMaps[T["type"]] extends null
+    ? null
+    : NodePath<t.ParentMaps[T["type"]]> | null = null;
+  container: t.Node | Array<t.Node> | null = null;
   listKey: string | null = null;
   key: string | number | null = null;
   node: T = null;
@@ -68,12 +71,12 @@ class NodePath<T extends t.Node = t.Node> {
     listKey,
     key,
   }: {
-    hub?;
-    parentPath;
-    parent;
-    container;
-    listKey?;
-    key;
+    hub?: HubInterface;
+    parentPath: NodePath | null;
+    parent: t.Node;
+    container: t.Node | t.Node[];
+    listKey?: string;
+    key: string | number;
   }): NodePath {
     if (!hub && parentPath) {
       hub = parentPath.hub;
@@ -83,7 +86,9 @@ class NodePath<T extends t.Node = t.Node> {
       throw new Error("To get a node path the parent needs to exist");
     }
 
-    const targetNode = container[key];
+    const targetNode =
+      // @ts-expect-error key must present in container
+      container[key];
 
     let paths = pathCache.get(parent);
     if (!paths) {
@@ -102,7 +107,7 @@ class NodePath<T extends t.Node = t.Node> {
     return path;
   }
 
-  getScope(scope: Scope) {
+  getScope(scope: Scope): Scope {
     return this.isScope() ? new Scope(this) : scope;
   }
 
@@ -141,6 +146,7 @@ class NodePath<T extends t.Node = t.Node> {
 
   set(key: string, node: any) {
     validate(this.node, key, node);
+    // @ts-expect-error key must present in this.node
     this.node[key] = node;
   }
 
@@ -155,7 +161,7 @@ class NodePath<T extends t.Node = t.Node> {
     return parts.join(".");
   }
 
-  debug(message) {
+  debug(message: string) {
     if (!debug.enabled) return;
     debug(`${this.getPathLocation()} ${this.type}: ${message}`);
   }
@@ -175,8 +181,8 @@ class NodePath<T extends t.Node = t.Node> {
     // ignore inList = true as it should depend on `listKey`
   }
 
-  get parentKey() {
-    return this.listKey || this.key;
+  get parentKey(): string {
+    return (this.listKey || this.key) as string;
   }
 
   get shouldSkip() {
@@ -230,31 +236,44 @@ Object.assign(
   NodePath_comments,
 );
 
+if (!process.env.BABEL_8_BREAKING) {
+  // The original _guessExecutionStatusRelativeToDifferentFunctions only worked for paths in
+  // different functions, but _guessExecutionStatusRelativeTo works as a replacement in those cases.
+
+  // @ts-expect-error
+  NodePath.prototype._guessExecutionStatusRelativeToDifferentFunctions =
+    NodePath_introspection._guessExecutionStatusRelativeTo;
+}
+
 // we can not use `import { TYPES } from "@babel/types"` here
 // because the transformNamedBabelTypesImportToDestructuring plugin in babel.config.js
 // does not offer live bindings for `TYPES`
 // we can change to `import { TYPES }` when we are publishing ES modules only
 for (const type of t.TYPES) {
   const typeKey = `is${type}`;
+  // @ts-expect-error typeKey must present in t
   const fn = t[typeKey];
-  NodePath.prototype[typeKey] = function (opts) {
+  // @ts-expect-error augmenting NodePath prototype
+  NodePath.prototype[typeKey] = function (opts: any) {
     return fn(this.node, opts);
   };
 
-  NodePath.prototype[`assert${type}`] = function (opts) {
+  // @ts-expect-error augmenting NodePath prototype
+  NodePath.prototype[`assert${type}`] = function (opts: any) {
     if (!fn(this.node, opts)) {
       throw new TypeError(`Expected node path of type ${type}`);
     }
   };
 }
 
-for (const type of Object.keys(virtualTypes)) {
+for (const type of Object.keys(virtualTypes) as (keyof typeof virtualTypes)[]) {
   if (type[0] === "_") continue;
   if (t.TYPES.indexOf(type) < 0) t.TYPES.push(type);
 
   const virtualType = virtualTypes[type];
 
-  NodePath.prototype[`is${type}`] = function (opts) {
+  NodePath.prototype[`is${type}`] = function (opts?: any) {
+    // @ts-expect-error checkPath will throw when type is ExistentialTypeParam/NumericLiteralTypeAnnotation
     return virtualType.checkPath(this, opts);
   };
 }
@@ -271,10 +290,28 @@ type NodePathMixins = typeof NodePath_ancestry &
   typeof NodePath_family &
   typeof NodePath_comments;
 
+// @ts-expect-error TS throws because ensureBlock returns the body node path
+// however, we don't use the return value and treat it as a transform and
+// assertion utilities. For better type inference we annotate it as an
+// assertion method
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface NodePath<T>
   extends NodePathAssetions,
     NodePathValidators,
-    NodePathMixins {}
+    NodePathMixins {
+  /**
+   * @see ./conversion.ts for implementation
+   */
+  ensureBlock<
+    T extends
+      | t.Loop
+      | t.WithStatement
+      | t.Function
+      | t.LabeledStatement
+      | t.CatchClause,
+  >(
+    this: NodePath<T>,
+  ): asserts this is NodePath<T & { body: t.BlockStatement }>;
+}
 
 export default NodePath;

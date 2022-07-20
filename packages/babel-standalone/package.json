@@ -1,6 +1,6 @@
 {
   "name": "@babel/standalone",
-  "version": "7.18.1",
+  "version": "7.18.9",
   "description": "Standalone build of Babel for use in non-Node.js environments.",
   "main": "./babel.js",
   "files": [
@@ -33,6 +33,7 @@
     "@babel/plugin-proposal-private-property-in-object": "workspace:^",
     "@babel/plugin-proposal-throw-expressions": "workspace:^",
     "@babel/plugin-proposal-unicode-property-regex": "workspace:^",
+    "@babel/plugin-proposal-unicode-sets-regex": "workspace:^",
     "@babel/plugin-syntax-async-generators": "^7.8.4",
     "@babel/plugin-syntax-class-properties": "^7.12.13",
     "@babel/plugin-syntax-class-static-block": "^7.14.5",
@@ -108,7 +109,8 @@
     "@babel/preset-env": "workspace:^",
     "@babel/preset-flow": "workspace:^",
     "@babel/preset-react": "workspace:^",
-    "@babel/preset-typescript": "workspace:^"
+    "@babel/preset-typescript": "workspace:^",
+    "acorn": "^8.7.0"
   },
   "keywords": [
     "babel",
@@ -140,6 +142,12 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
@@ -147,5 +155,6 @@
     "./babel.js": "./babel.js",
     "./babel.min.js": "./babel.min.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

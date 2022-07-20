@@ -2,7 +2,9 @@
 {
   "extends": "./tsconfig.base.json",
   "include": [
+    "./packages/babel-cli/src/**/*.ts",
     "./packages/babel-code-frame/src/**/*.ts",
+    "./packages/babel-compat-data/src/**/*.ts",
     "./packages/babel-core/src/**/*.ts",
     "./packages/babel-generator/src/**/*.ts",
     "./packages/babel-helper-annotate-as-pure/src/**/*.ts",
@@ -29,12 +31,14 @@
     "./packages/babel-helper-simple-access/src/**/*.ts",
     "./packages/babel-helper-skip-transparent-expression-wrappers/src/**/*.ts",
     "./packages/babel-helper-split-export-declaration/src/**/*.ts",
+    "./packages/babel-helper-string-parser/src/**/*.ts",
     "./packages/babel-helper-transform-fixture-test-runner/src/**/*.ts",
     "./packages/babel-helper-validator-identifier/src/**/*.ts",
     "./packages/babel-helper-validator-option/src/**/*.ts",
     "./packages/babel-helper-wrap-function/src/**/*.ts",
     "./packages/babel-helpers/src/**/*.ts",
     "./packages/babel-highlight/src/**/*.ts",
+    "./packages/babel-node/src/**/*.ts",
     "./packages/babel-plugin-bugfix-safari-id-destructuring-collision-in-function-expression/src/**/*.ts",
     "./packages/babel-plugin-bugfix-v8-spread-parameters-in-optional-chaining/src/**/*.ts",
     "./packages/babel-plugin-external-helpers/src/**/*.ts",
@@ -149,8 +153,29 @@
   ],
   "compilerOptions": {
     "paths": {
+      "@babel/cli": [
+        "./packages/babel-cli/src"
+      ],
       "@babel/code-frame": [
         "./packages/babel-code-frame/src"
+      ],
+      "@babel/compat-data/plugins": [
+        "./packages/babel-compat-data/data/plugins.json"
+      ],
+      "@babel/compat-data/native-modules": [
+        "./packages/babel-compat-data/data/native-modules.json"
+      ],
+      "@babel/compat-data/corejs2-built-ins": [
+        "./packages/babel-compat-data/data/corejs2-built-ins.json"
+      ],
+      "@babel/compat-data/corejs3-shipped-proposals": [
+        "./packages/babel-compat-data/data/corejs3-shipped-proposals.json"
+      ],
+      "@babel/compat-data/overlapping-plugins": [
+        "./packages/babel-compat-data/data/overlapping-plugins.json"
+      ],
+      "@babel/compat-data/plugin-bugfixes": [
+        "./packages/babel-compat-data/data/plugin-bugfixes.json"
       ],
       "@babel/core": [
         "./packages/babel-core/src"
@@ -230,6 +255,9 @@
       "@babel/helper-split-export-declaration": [
         "./packages/babel-helper-split-export-declaration/src"
       ],
+      "@babel/helper-string-parser": [
+        "./packages/babel-helper-string-parser/src"
+      ],
       "@babel/helper-transform-fixture-test-runner": [
         "./packages/babel-helper-transform-fixture-test-runner/src"
       ],
@@ -247,6 +275,9 @@
       ],
       "@babel/highlight": [
         "./packages/babel-highlight/src"
+      ],
+      "@babel/node": [
+        "./packages/babel-node/src"
       ],
       "@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression": [
         "./packages/babel-plugin-bugfix-safari-id-destructuring-collision-in-function-expression/src"
@@ -646,6 +677,60 @@
       ],
       "@babel/plugin-syntax-trailing-function-commas": [
         "./lib/archived-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-async-arrows-in-class": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-edge-default-parameters": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-edge-function-name": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-tagged-template-caching": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-safari-block-shadowing": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "@babel/preset-modules/lib/plugins/transform-safari-for-shadowing": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "babel-plugin-polyfill-corejs2": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "babel-plugin-polyfill-corejs3": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "babel-plugin-polyfill-regenerator": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "regenerator-transform": [
+        "./lib/third-party-libs.d.ts"
+      ],
+      "babel-plugin-dynamic-import-node/utils": [
+        "./lib/babel-plugin-dynamic-import-node.d.ts"
+      ],
+      "globals": [
+        "./node_modules/globals-BABEL_8_BREAKING-true"
+      ],
+      "js-tokens": [
+        "./node_modules/js-tokens-BABEL_8_BREAKING-true"
+      ],
+      "regexpu-core": [
+        "./lib/regexpu-core.d.ts"
+      ],
+      "to-fast-properties": [
+        "./node_modules/to-fast-properties-BABEL_8_BREAKING-true"
+      ],
+      "slash": [
+        "./node_modules/slash-BABEL_8_BREAKING-true"
+      ],
+      "fs-readdir-recursive": [
+        "./lib/fs-readdir-recursive.d.ts"
+      ],
+      "kexec": [
+        "./lib/kexec.d.ts"
       ]
     }
   }

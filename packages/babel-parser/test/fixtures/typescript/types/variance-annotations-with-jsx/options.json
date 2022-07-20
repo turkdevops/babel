@@ -1,4 +1,7 @@
 {
-  "BABEL_8_BREAKING": false,
-  "plugins": ["jsx", "typescript"]
+  "BABEL_8_BREAKING": true,
+  "plugins": [
+    "jsx",
+    "typescript"
+  ]
 }

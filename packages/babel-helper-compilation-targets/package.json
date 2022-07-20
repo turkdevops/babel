@@ -1,6 +1,6 @@
 {
   "name": "@babel/helper-compilation-targets",
-  "version": "7.17.10",
+  "version": "7.18.9",
   "author": "The Babel Team (https://babel.dev/team)",
   "license": "MIT",
   "description": "Helper functions on Babel compilation targets",
@@ -37,5 +37,14 @@
   },
   "engines": {
     "node": ">=6.9.0"
+  },
+  "type": "commonjs",
+  "conditions": {
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
+    ]
   }
 }

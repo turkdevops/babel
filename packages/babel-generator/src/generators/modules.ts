@@ -68,7 +68,7 @@ export function ExportNamespaceSpecifier(
 
 export function ExportAllDeclaration(
   this: Printer,
-  node: t.ExportAllDeclaration,
+  node: t.ExportAllDeclaration | t.DeclareExportAllDeclaration,
 ) {
   this.word("export");
   this.space();
@@ -81,6 +81,7 @@ export function ExportAllDeclaration(
   this.word("from");
   this.space();
   this.print(node.source, node);
+  // @ts-expect-error Fixme: assertions is not defined in DeclareExportAllDeclaration
   this.printAssertions(node);
   this.semicolon();
 }
@@ -89,37 +90,17 @@ export function ExportNamedDeclaration(
   this: Printer,
   node: t.ExportNamedDeclaration,
 ) {
-  if (
-    this.format.decoratorsBeforeExport &&
-    isClassDeclaration(node.declaration)
-  ) {
-    this.printJoin(node.declaration.decorators, node);
+  if (!process.env.BABEL_8_BREAKING) {
+    if (
+      this.format.decoratorsBeforeExport &&
+      isClassDeclaration(node.declaration)
+    ) {
+      this.printJoin(node.declaration.decorators, node);
+    }
   }
 
   this.word("export");
   this.space();
-  ExportDeclaration.apply(this, arguments);
-}
-
-export function ExportDefaultDeclaration(
-  this: Printer,
-  node: t.ExportDefaultDeclaration,
-) {
-  if (
-    this.format.decoratorsBeforeExport &&
-    isClassDeclaration(node.declaration)
-  ) {
-    this.printJoin(node.declaration.decorators, node);
-  }
-
-  this.word("export");
-  this.space();
-  this.word("default");
-  this.space();
-  ExportDeclaration.apply(this, arguments);
-}
-
-function ExportDeclaration(node: any) {
   if (node.declaration) {
     const declar = node.declaration;
     this.print(declar, node);
@@ -171,6 +152,28 @@ function ExportDeclaration(node: any) {
 
     this.semicolon();
   }
+}
+
+export function ExportDefaultDeclaration(
+  this: Printer,
+  node: t.ExportDefaultDeclaration,
+) {
+  if (!process.env.BABEL_8_BREAKING) {
+    if (
+      this.format.decoratorsBeforeExport &&
+      isClassDeclaration(node.declaration)
+    ) {
+      this.printJoin(node.declaration.decorators, node);
+    }
+  }
+
+  this.word("export");
+  this.space();
+  this.word("default");
+  this.space();
+  const declar = node.declaration;
+  this.print(declar, node);
+  if (!isStatement(declar)) this.semicolon();
 }
 
 export function ImportDeclaration(this: Printer, node: t.ImportDeclaration) {

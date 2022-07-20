@@ -1,6 +1,6 @@
 {
   "name": "@babel/plugin-proposal-pipeline-operator",
-  "version": "7.17.12",
+  "version": "7.18.9",
   "description": "Transform pipeline operator into call expressions",
   "repository": {
     "type": "git",
@@ -37,10 +37,17 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

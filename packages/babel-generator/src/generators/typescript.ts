@@ -131,7 +131,10 @@ export function TSPropertySignature(
   this.token(";");
 }
 
-export function tsPrintPropertyOrMethodName(this: Printer, node) {
+export function tsPrintPropertyOrMethodName(
+  this: Printer,
+  node: t.TSPropertySignature | t.TSMethodSignature,
+) {
   if (node.computed) {
     this.token("[");
   }
@@ -208,7 +211,7 @@ export function TSNullKeyword(this: Printer) {
 export function TSNeverKeyword(this: Printer) {
   this.word("never");
 }
-export function TSIntrinsicKeyword() {
+export function TSIntrinsicKeyword(this: Printer) {
   this.word("intrinsic");
 }
 
@@ -232,13 +235,14 @@ export function TSConstructorType(this: Printer, node: t.TSConstructorType) {
 
 export function tsPrintFunctionOrConstructorType(
   this: Printer,
-  // todo: missing type FunctionOrConstructorType
-  node: any,
+  node: t.TSFunctionType | t.TSConstructorType,
 ) {
   const { typeParameters } = node;
   const parameters = process.env.BABEL_8_BREAKING
-    ? node.params
-    : node.parameters;
+    ? // @ts-ignore(Babel 7 vs Babel 8) Babel 8 AST shape
+      node.params
+    : // @ts-ignore(Babel 7 vs Babel 8) Babel 7 AST shape
+      node.parameters;
   this.print(typeParameters, node);
   this.token("(");
   this._parameters(parameters, node);
@@ -247,14 +251,16 @@ export function tsPrintFunctionOrConstructorType(
   this.token("=>");
   this.space();
   const returnType = process.env.BABEL_8_BREAKING
-    ? node.returnType
-    : node.typeAnnotation;
+    ? // @ts-ignore(Babel 7 vs Babel 8) Babel 8 AST shape
+      node.returnType
+    : // @ts-ignore(Babel 7 vs Babel 8) Babel 7 AST shape
+      node.typeAnnotation;
   this.print(returnType.typeAnnotation, node);
 }
 
 export function TSTypeReference(this: Printer, node: t.TSTypeReference) {
-  this.print(node.typeName, node);
-  this.print(node.typeParameters, node);
+  this.print(node.typeName, node, true);
+  this.print(node.typeParameters, node, true);
 }
 
 export function TSTypePredicate(this: Printer, node: t.TSTypePredicate) {
@@ -287,31 +293,32 @@ export function TSTypeLiteral(this: Printer, node: t.TSTypeLiteral) {
 
 export function tsPrintTypeLiteralOrInterfaceBody(
   this: Printer,
-  members,
-  node,
+  members: t.TSTypeElement[],
+  node: t.TSType | t.TSInterfaceBody,
 ) {
-  this.tsPrintBraced(members, node);
+  tsPrintBraced(this, members, node);
 }
 
-export function tsPrintBraced(this: Printer, members, node) {
-  this.token("{");
+function tsPrintBraced(printer: Printer, members: t.Node[], node: t.Node) {
+  printer.token("{");
   if (members.length) {
-    this.indent();
-    this.newline();
+    printer.indent();
+    printer.newline();
     for (const member of members) {
-      this.print(member, node);
+      printer.print(member, node);
       //this.token(sep);
-      this.newline();
+      printer.newline();
     }
-    this.dedent();
-    this.rightBrace();
+    printer.dedent();
+    printer.rightBrace();
   } else {
-    this.token("}");
+    printer.token("}");
   }
 }
 
 export function TSArrayType(this: Printer, node: t.TSArrayType) {
-  this.print(node.elementType, node);
+  this.print(node.elementType, node, true);
+
   this.token("[]");
 }
 
@@ -340,15 +347,19 @@ export function TSNamedTupleMember(this: Printer, node: t.TSNamedTupleMember) {
 }
 
 export function TSUnionType(this: Printer, node: t.TSUnionType) {
-  this.tsPrintUnionOrIntersectionType(node, "|");
+  tsPrintUnionOrIntersectionType(this, node, "|");
 }
 
 export function TSIntersectionType(this: Printer, node: t.TSIntersectionType) {
-  this.tsPrintUnionOrIntersectionType(node, "&");
+  tsPrintUnionOrIntersectionType(this, node, "&");
 }
 
-export function tsPrintUnionOrIntersectionType(this: Printer, node: any, sep) {
-  this.printJoin(node.types, node, {
+function tsPrintUnionOrIntersectionType(
+  printer: Printer,
+  node: t.TSUnionType | t.TSIntersectionType,
+  sep: "|" | "&",
+) {
+  printer.printJoin(node.types, node, {
     separator() {
       this.space();
       this.token(sep);
@@ -398,7 +409,7 @@ export function TSIndexedAccessType(
   this: Printer,
   node: t.TSIndexedAccessType,
 ) {
-  this.print(node.objectType, node);
+  this.print(node.objectType, node, true);
   this.token("[");
   this.print(node.indexType, node);
   this.token("]");
@@ -445,7 +456,7 @@ export function TSMappedType(this: Printer, node: t.TSMappedType) {
   this.token("}");
 }
 
-function tokenIfPlusMinus(self, tok) {
+function tokenIfPlusMinus(self: Printer, tok: true | "+" | "-") {
   if (tok !== true) {
     self.token(tok);
   }
@@ -550,7 +561,7 @@ export function TSEnumDeclaration(this: Printer, node: t.TSEnumDeclaration) {
   this.space();
   this.print(id, node);
   this.space();
-  this.tsPrintBraced(members, node);
+  tsPrintBraced(this, members, node);
 }
 
 export function TSEnumMember(this: Printer, node: t.TSEnumMember) {
@@ -599,7 +610,7 @@ export function TSModuleDeclaration(
 }
 
 export function TSModuleBlock(this: Printer, node: t.TSModuleBlock) {
-  this.tsPrintBraced(node.body, node);
+  tsPrintBraced(this, node.body, node);
 }
 
 export function TSImportType(this: Printer, node: t.TSImportType) {
@@ -690,7 +701,17 @@ export function tsPrintSignatureDeclarationBase(this: Printer, node: any) {
   this.print(returnType, node);
 }
 
-export function tsPrintClassMemberModifiers(this: Printer, node: any, isField) {
+export function tsPrintClassMemberModifiers(
+  this: Printer,
+  node:
+    | t.ClassProperty
+    | t.ClassAccessorProperty
+    | t.ClassMethod
+    | t.ClassPrivateMethod
+    | t.TSDeclareMethod,
+) {
+  const isField =
+    node.type === "ClassAccessorProperty" || node.type === "ClassProperty";
   if (isField && node.declare) {
     this.word("declare");
     this.space();

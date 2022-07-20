@@ -1,3 +1,5 @@
+// TODO(Babel 8): Remove this file
+
 import { types as t, template } from "@babel/core";
 import type { File } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
@@ -92,13 +94,17 @@ function extractElementDescriptor(
 
   const { node, scope } = path as NodePath<SupportedElement>;
 
-  new ReplaceSupers({
-    methodPath: path,
-    objectRef: classRef,
-    superRef,
-    file,
-    refToPreserve: classRef,
-  }).replace();
+  if (!path.isTSDeclareMethod()) {
+    new ReplaceSupers({
+      methodPath: path as NodePath<
+        Exclude<SupportedElement, t.TSDeclareMethod>
+      >,
+      objectRef: classRef,
+      superRef,
+      file,
+      refToPreserve: classRef,
+    }).replace();
+  }
 
   const properties: t.ObjectExpression["properties"] = [
     prop("kind", t.stringLiteral(t.isClassMethod(node) ? node.kind : "field")),
@@ -108,9 +114,20 @@ function extractElementDescriptor(
   ].filter(Boolean);
 
   if (t.isClassMethod(node)) {
-    const id = node.computed ? null : node.key;
-    t.toExpression(node);
-    properties.push(prop("value", nameFunction({ node, id, scope }) || node));
+    const id = node.computed
+      ? null
+      : (node.key as
+          | t.Identifier
+          | t.StringLiteral
+          | t.NumericLiteral
+          | t.BigIntLiteral);
+    const transformed = t.toExpression(node);
+    properties.push(
+      prop(
+        "value",
+        nameFunction({ node: transformed, id, scope }) || transformed,
+      ),
+    );
   } else if (t.isClassProperty(node) && node.value) {
     properties.push(
       method("value", template.statements.ast`return ${node.value}`),

@@ -1,6 +1,6 @@
 {
   "name": "@babel/helper-wrap-function",
-  "version": "7.16.8",
+  "version": "7.18.9",
   "description": "Helper to wrap functions inside a function call.",
   "repository": {
     "type": "git",
@@ -29,10 +29,17 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

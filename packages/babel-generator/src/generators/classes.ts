@@ -9,13 +9,17 @@ import * as charCodes from "charcodes";
 export function ClassDeclaration(
   this: Printer,
   node: t.ClassDeclaration,
-  parent: any,
+  parent: t.Node,
 ) {
-  if (
-    !this.format.decoratorsBeforeExport ||
-    (!isExportDefaultDeclaration(parent) && !isExportNamedDeclaration(parent))
-  ) {
+  if (process.env.BABEL_8_BREAKING) {
     this.printJoin(node.decorators, node);
+  } else {
+    if (
+      !this.format.decoratorsBeforeExport ||
+      (!isExportDefaultDeclaration(parent) && !isExportNamedDeclaration(parent))
+    ) {
+      this.printJoin(node.decorators, node);
+    }
   }
 
   if (node.declare) {
@@ -86,7 +90,7 @@ export function ClassProperty(this: Printer, node: t.ClassProperty) {
   // between member modifiers and the property key.
   this.source("end", node.key.loc);
 
-  this.tsPrintClassMemberModifiers(node, /* isField */ true);
+  this.tsPrintClassMemberModifiers(node);
 
   if (node.computed) {
     this.token("[");
@@ -125,7 +129,8 @@ export function ClassAccessorProperty(
   // between member modifiers and the property key.
   this.source("end", node.key.loc);
 
-  this.tsPrintClassMemberModifiers(node, /* isField */ true);
+  // TS does not support class accessor property yet
+  this.tsPrintClassMemberModifiers(node);
 
   this.word("accessor");
   this.printInnerComments(node);
@@ -136,6 +141,7 @@ export function ClassAccessorProperty(
     this.print(node.key, node);
     this.token("]");
   } else {
+    // Todo: Flow does not support class accessor property yet.
     this._variance(node);
     this.print(node.key, node);
   }
@@ -190,16 +196,19 @@ export function ClassPrivateMethod(this: Printer, node: t.ClassPrivateMethod) {
   this.print(node.body, node);
 }
 
-export function _classMethodHead(this: Printer, node) {
+export function _classMethodHead(
+  this: Printer,
+  node: t.ClassMethod | t.ClassPrivateMethod | t.TSDeclareMethod,
+) {
   this.printJoin(node.decorators, node);
   // catch up to method key, avoid line break
   // between member modifiers/method heads and the method key.
   this.source("end", node.key.loc);
-  this.tsPrintClassMemberModifiers(node, /* isField */ false);
+  this.tsPrintClassMemberModifiers(node);
   this._methodHead(node);
 }
 
-export function StaticBlock(node: t.StaticBlock) {
+export function StaticBlock(this: Printer, node: t.StaticBlock) {
   this.word("static");
   this.space();
   this.token("{");

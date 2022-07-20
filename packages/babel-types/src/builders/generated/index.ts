@@ -96,7 +96,7 @@ export function breakStatement(
   });
 }
 export function callExpression(
-  callee: t.Expression | t.V8IntrinsicIdentifier,
+  callee: t.Expression | t.Super | t.V8IntrinsicIdentifier,
   _arguments: Array<
     t.Expression | t.SpreadElement | t.JSXNamespacedName | t.ArgumentPlaceholder
   >,
@@ -314,7 +314,7 @@ export function logicalExpression(
   });
 }
 export function memberExpression(
-  object: t.Expression,
+  object: t.Expression | t.Super,
   property: t.Expression | t.Identifier | t.PrivateName,
   computed: boolean = false,
   optional: true | false | null = null,
@@ -328,7 +328,7 @@ export function memberExpression(
   });
 }
 export function newExpression(
-  callee: t.Expression | t.V8IntrinsicIdentifier,
+  callee: t.Expression | t.Super | t.V8IntrinsicIdentifier,
   _arguments: Array<
     t.Expression | t.SpreadElement | t.JSXNamespacedName | t.ArgumentPlaceholder
   >,
@@ -364,7 +364,12 @@ export function objectExpression(
 }
 export function objectMethod(
   kind: "method" | "get" | "set" | undefined = "method",
-  key: t.Expression | t.Identifier | t.StringLiteral | t.NumericLiteral,
+  key:
+    | t.Expression
+    | t.Identifier
+    | t.StringLiteral
+    | t.NumericLiteral
+    | t.BigIntLiteral,
   params: Array<t.Identifier | t.Pattern | t.RestElement>,
   body: t.BlockStatement,
   computed: boolean = false,
@@ -560,7 +565,7 @@ export function assignmentPattern(
   });
 }
 export function arrayPattern(
-  elements: Array<null | t.PatternLike>,
+  elements: Array<null | t.PatternLike | t.LVal>,
 ): t.ArrayPattern {
   return validateNode<t.ArrayPattern>({
     type: "ArrayPattern",
@@ -635,8 +640,8 @@ export function exportAllDeclaration(
 }
 export function exportDefaultDeclaration(
   declaration:
-    | t.FunctionDeclaration
     | t.TSDeclareFunction
+    | t.FunctionDeclaration
     | t.ClassDeclaration
     | t.Expression,
 ): t.ExportDefaultDeclaration {
@@ -733,7 +738,12 @@ export function metaProperty(
 }
 export function classMethod(
   kind: "get" | "set" | "method" | "constructor" | undefined = "method",
-  key: t.Identifier | t.StringLiteral | t.NumericLiteral | t.Expression,
+  key:
+    | t.Identifier
+    | t.StringLiteral
+    | t.NumericLiteral
+    | t.BigIntLiteral
+    | t.Expression,
   params: Array<
     t.Identifier | t.Pattern | t.RestElement | t.TSParameterProperty
   >,
@@ -870,7 +880,12 @@ export function optionalCallExpression(
   });
 }
 export function classProperty(
-  key: t.Identifier | t.StringLiteral | t.NumericLiteral | t.Expression,
+  key:
+    | t.Identifier
+    | t.StringLiteral
+    | t.NumericLiteral
+    | t.BigIntLiteral
+    | t.Expression,
   value: t.Expression | null = null,
   typeAnnotation: t.TypeAnnotation | t.TSTypeAnnotation | t.Noop | null = null,
   decorators: Array<t.Decorator> | null = null,
@@ -892,6 +907,7 @@ export function classAccessorProperty(
     | t.Identifier
     | t.StringLiteral
     | t.NumericLiteral
+    | t.BigIntLiteral
     | t.Expression
     | t.PrivateName,
   value: t.Expression | null = null,
@@ -912,9 +928,9 @@ export function classAccessorProperty(
 }
 export function classPrivateProperty(
   key: t.PrivateName,
-  value: t.Expression | null | undefined = null,
-  decorators: Array<t.Decorator> | null | undefined = null,
-  _static: any,
+  value: t.Expression | null = null,
+  decorators: Array<t.Decorator> | null = null,
+  _static: boolean = false,
 ): t.ClassPrivateProperty {
   return validateNode<t.ClassPrivateProperty>({
     type: "ClassPrivateProperty",
@@ -925,7 +941,7 @@ export function classPrivateProperty(
   });
 }
 export function classPrivateMethod(
-  kind: "get" | "set" | "method" | "constructor" | undefined = "method",
+  kind: "get" | "set" | "method" | undefined = "method",
   key: t.PrivateName,
   params: Array<
     t.Identifier | t.Pattern | t.RestElement | t.TSParameterProperty
@@ -1870,7 +1886,12 @@ export function tsDeclareFunction(
 export { tsDeclareFunction as tSDeclareFunction };
 export function tsDeclareMethod(
   decorators: Array<t.Decorator> | null | undefined = null,
-  key: t.Identifier | t.StringLiteral | t.NumericLiteral | t.Expression,
+  key:
+    | t.Identifier
+    | t.StringLiteral
+    | t.NumericLiteral
+    | t.BigIntLiteral
+    | t.Expression,
   typeParameters:
     | t.TSTypeParameterDeclaration
     | t.Noop
@@ -2251,6 +2272,7 @@ export function tsLiteralType(
     | t.StringLiteral
     | t.BooleanLiteral
     | t.BigIntLiteral
+    | t.TemplateLiteral
     | t.UnaryExpression,
 ): t.TSLiteralType {
   return validateNode<t.TSLiteralType>({

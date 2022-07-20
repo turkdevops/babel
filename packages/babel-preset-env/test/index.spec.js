@@ -1,23 +1,38 @@
 // eslint-disable-next-line import/extensions
 import compatData from "@babel/compat-data/plugins";
 
-import babelPresetEnv from "../lib/index.js";
+import * as babelPresetEnv from "../lib/index.js";
 
 import _removeRegeneratorEntryPlugin from "../lib/polyfills/regenerator.js";
 import _pluginLegacyBabelPolyfill from "../lib/polyfills/babel-polyfill.js";
 import _transformations from "../lib/module-transformations.js";
 import _availablePlugins from "../lib/available-plugins.js";
-const removeRegeneratorEntryPlugin = _removeRegeneratorEntryPlugin.default;
-const pluginLegacyBabelPolyfill = _pluginLegacyBabelPolyfill.default;
-const transformations = _transformations.default;
-const availablePlugins = _availablePlugins.default;
+const removeRegeneratorEntryPlugin =
+  _removeRegeneratorEntryPlugin.default || _removeRegeneratorEntryPlugin;
+const pluginLegacyBabelPolyfill =
+  _pluginLegacyBabelPolyfill.default || _pluginLegacyBabelPolyfill;
+const transformations = _transformations.default || _transformations;
+const availablePlugins = _availablePlugins.default || _availablePlugins;
 
+// We need to load the correct plugins version (ESM or CJS),
+// because our tests rely on function identity.
+let pluginCoreJS2, pluginCoreJS3, pluginRegenerator;
+import _pluginCoreJS2_esm from "babel-plugin-polyfill-corejs2";
+import _pluginCoreJS3_esm from "babel-plugin-polyfill-corejs3";
+import _pluginRegenerator_esm from "babel-plugin-polyfill-regenerator";
 import { createRequire } from "module";
-const require = createRequire(import.meta.url);
+// eslint-disable-next-line @babel/development-internal/require-default-import-fallback
+if (/* commonjs */ _transformations.default) {
+  const require = createRequire(import.meta.url);
 
-const pluginCoreJS2 = require("babel-plugin-polyfill-corejs2").default;
-const pluginCoreJS3 = require("babel-plugin-polyfill-corejs3").default;
-const pluginRegenerator = require("babel-plugin-polyfill-regenerator").default;
+  pluginCoreJS2 = require("babel-plugin-polyfill-corejs2").default;
+  pluginCoreJS3 = require("babel-plugin-polyfill-corejs3").default;
+  pluginRegenerator = require("babel-plugin-polyfill-regenerator").default;
+} else {
+  pluginCoreJS2 = _pluginCoreJS2_esm;
+  pluginCoreJS3 = _pluginCoreJS3_esm;
+  pluginRegenerator = _pluginRegenerator_esm;
+}
 
 describe("babel-preset-env", () => {
   describe("transformIncludesAndExcludes", () => {

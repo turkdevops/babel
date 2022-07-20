@@ -8,7 +8,9 @@ import { willPathCastToBoolean, findOutermostTransparentParent } from "./util";
 
 const { ast } = template.expression;
 
-function isSimpleMemberExpression(expression) {
+function isSimpleMemberExpression(
+  expression: t.Expression | t.Super,
+): expression is t.Identifier | t.Super | t.MemberExpression {
   expression = skipTransparentExprWrapperNodes(expression);
   return (
     t.isIdentifier(expression) ||
@@ -24,18 +26,22 @@ function isSimpleMemberExpression(expression) {
  * @param {NodePath} path
  * @returns {boolean}
  */
-function needsMemoize(path) {
-  let optionalPath = path;
+function needsMemoize(
+  path: NodePath<t.OptionalCallExpression | t.OptionalMemberExpression>,
+) {
+  let optionalPath: NodePath = path;
   const { scope } = path;
   while (
     optionalPath.isOptionalMemberExpression() ||
     optionalPath.isOptionalCallExpression()
   ) {
     const { node } = optionalPath;
-    const childKey = optionalPath.isOptionalMemberExpression()
-      ? "object"
-      : "callee";
-    const childPath = skipTransparentExprWrappers(optionalPath.get(childKey));
+    const childPath = skipTransparentExprWrappers(
+      // @ts-expect-error isOptionalMemberExpression does not work with NodePath union
+      optionalPath.isOptionalMemberExpression()
+        ? optionalPath.get("object")
+        : optionalPath.get("callee"),
+    );
     if (node.optional) {
       return !scope.isStatic(childPath.node);
     }
@@ -82,7 +88,7 @@ export function transform(
     if (node.optional) {
       optionals.push(node);
     }
-
+    // @ts-expect-error isOptionalMemberExpression does not work with NodePath union
     if (optionalPath.isOptionalMemberExpression()) {
       // @ts-expect-error todo(flow->ts) avoid changing more type
       optionalPath.node.type = "MemberExpression";
@@ -96,18 +102,23 @@ export function transform(
     }
   }
 
+  // todo: Improve replacementPath typings
   let replacementPath: NodePath<any> = path;
   if (parentPath.isUnaryExpression({ operator: "delete" })) {
     replacementPath = parentPath;
     isDeleteOperation = true;
   }
   for (let i = optionals.length - 1; i >= 0; i--) {
-    const node = optionals[i];
+    const node = optionals[i] as unknown as
+      | t.MemberExpression
+      | t.CallExpression;
 
     const isCall = t.isCallExpression(node);
-    const replaceKey = isCall ? "callee" : "object";
 
-    const chainWithTypes = node[replaceKey];
+    const chainWithTypes = isCall
+      ? // V8 intrinsics must not be an optional call
+        (node.callee as t.Expression)
+      : node.object;
     const chain = skipTransparentExprWrapperNodes(chainWithTypes);
 
     let ref;
@@ -115,12 +126,12 @@ export function transform(
     if (isCall && t.isIdentifier(chain, { name: "eval" })) {
       check = ref = chain;
       // `eval?.()` is an indirect eval call transformed to `(0,eval)()`
-      node[replaceKey] = t.sequenceExpression([t.numericLiteral(0), ref]);
+      node.callee = t.sequenceExpression([t.numericLiteral(0), ref]);
     } else if (pureGetters && isCall && isSimpleMemberExpression(chain)) {
       // If we assume getters are pure (avoiding a Function#call) and we are at the call,
       // we can avoid a needless memoize. We only do this if the callee is a simple member
       // expression, to avoid multiple calls to nested call expressions.
-      check = ref = chainWithTypes;
+      check = ref = node.callee;
     } else {
       ref = scope.maybeGenerateMemoised(chain);
       if (ref) {
@@ -129,11 +140,11 @@ export function transform(
           t.cloneNode(ref),
           // Here `chainWithTypes` MUST NOT be cloned because it could be
           // updated when generating the memoised context of a call
-          // expression
-          chainWithTypes,
+          // expression. It must be an Expression when `ref` is an identifier
+          chainWithTypes as t.Expression,
         );
 
-        node[replaceKey] = ref;
+        isCall ? (node.callee = ref) : (node.object = ref);
       } else {
         check = ref = chainWithTypes;
       }
@@ -150,13 +161,17 @@ export function transform(
         // Otherwise, we need to memoize the context object, and change the call into a Function#call.
         // `a.?b.?()` translates roughly to `(_b = _a.b) != null && _b.call(_a)`
         const { object } = chain;
-        let context: t.Expression = scope.maybeGenerateMemoised(object);
-        if (context) {
-          chain.object = t.assignmentExpression("=", context, object);
-        } else if (t.isSuper(object)) {
+        let context: t.Expression;
+        if (t.isSuper(object)) {
           context = t.thisExpression();
         } else {
-          context = object;
+          const memoized = scope.maybeGenerateMemoised(object);
+          if (memoized) {
+            context = memoized;
+            chain.object = t.assignmentExpression("=", memoized, object);
+          } else {
+            context = object;
+          }
         }
 
         node.arguments.unshift(t.cloneNode(context));
@@ -171,7 +186,10 @@ export function transform(
     // i.e. `?.b` in `(a?.b.c)()`
     if (i === 0 && parentIsCall) {
       // `(a?.b)()` to `(a == null ? undefined : a.b.bind(a))()`
-      const object = skipTransparentExprWrapperNodes(replacement.object);
+      // object must not be Super as super?.foo is invalid
+      const object = skipTransparentExprWrapperNodes(
+        replacement.object,
+      ) as t.Expression;
       let baseRef;
       if (!pureGetters || !isSimpleMemberExpression(object)) {
         // memoize the context object when getters are not always pure

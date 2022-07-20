@@ -1,4 +1,4 @@
-import gensync from "gensync";
+import gensync, { type Handler, type Callback } from "gensync";
 
 export type {
   ResolvedConfig,
@@ -18,9 +18,12 @@ type PluginAPI = basePluginAPI & typeof import("..");
 type PresetAPI = basePresetAPI & typeof import("..");
 export type { PluginAPI, PresetAPI };
 // todo: may need to refine PresetObject to be a subset of ValidatedOptions
-export type { ValidatedOptions as PresetObject } from "./validation/options";
+export type {
+  CallerMetadata,
+  ValidatedOptions as PresetObject,
+} from "./validation/options";
 
-import loadFullConfig from "./full";
+import loadFullConfig, { type ResolvedConfig } from "./full";
 import { loadPartialConfig as loadPartialConfigRunner } from "./partial";
 
 export { loadFullConfig as default };
@@ -29,24 +32,30 @@ export type { PartialConfig } from "./partial";
 import { createConfigItem as createConfigItemImpl } from "./item";
 import type { ConfigItem } from "./item";
 
-const loadOptionsRunner = gensync<(opts: unknown) => any>(function* (opts) {
+const loadOptionsRunner = gensync(function* (
+  opts: unknown,
+): Handler<ResolvedConfig | null> {
   const config = yield* loadFullConfig(opts);
   // NOTE: We want to return "null" explicitly, while ?. alone returns undefined
   return config?.options ?? null;
 });
 
-const createConfigItemRunner =
-  gensync<(...args: Parameters<typeof createConfigItemImpl>) => ConfigItem>(
-    createConfigItemImpl,
-  );
+const createConfigItemRunner = gensync(createConfigItemImpl);
 
-const maybeErrback = runner => (opts: unknown, callback?: Function) => {
-  if (callback === undefined && typeof opts === "function") {
-    callback = opts;
-    opts = undefined;
-  }
-  return callback ? runner.errback(opts, callback) : runner.sync(opts);
-};
+const maybeErrback =
+  <Arg, Return>(runner: gensync.Gensync<[Arg], Return>) =>
+  (argOrCallback: Arg | Callback<Return>, maybeCallback?: Callback<Return>) => {
+    let arg: Arg | undefined;
+    let callback: Callback<Return>;
+    if (maybeCallback === undefined && typeof argOrCallback === "function") {
+      callback = argOrCallback as Callback<Return>;
+      arg = undefined;
+    } else {
+      callback = maybeCallback;
+      arg = argOrCallback as Arg;
+    }
+    return callback ? runner.errback(arg, callback) : runner.sync(arg);
+  };
 
 export const loadPartialConfig = maybeErrback(loadPartialConfigRunner);
 export const loadPartialConfigSync = loadPartialConfigRunner.sync;
@@ -60,7 +69,7 @@ export const createConfigItemSync = createConfigItemRunner.sync;
 export const createConfigItemAsync = createConfigItemRunner.async;
 export function createConfigItem(
   target: PluginTarget,
-  options: any,
+  options: Parameters<typeof createConfigItemImpl>[1],
   callback?: (err: Error, val: ConfigItem | null) => void,
 ) {
   if (callback !== undefined) {

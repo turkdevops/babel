@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 let import_;
 try {
   // Node < 13.3 doesn't support import() syntax.
-  import_ = require("./import").default;
+  import_ = require("./import.cjs");
 } catch {}
 
 // import.meta.resolve is only available in ESM, but this file is compiled to CJS.
@@ -34,7 +34,8 @@ const importMetaResolveP: Promise<ImportMeta["resolve"]> =
   // it throws because it's a module, will fallback to import().
   process.execArgv.includes("--experimental-import-meta-resolve")
     ? import_("data:text/javascript,export default import.meta.resolve").then(
-        m => m.default || polyfill,
+        (m: { default: ImportMeta["resolve"] | undefined }) =>
+          m.default || polyfill,
         () => polyfill,
       )
     : Promise.resolve(polyfill);

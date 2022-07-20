@@ -43,6 +43,7 @@ module.exports = {
         "@typescript-eslint/no-dupe-class-members": "error",
         "no-undef": "off",
         "no-redeclare": "off",
+        "@babel/development-internal/disallow-ts-ignore": "error",
       },
     },
     {
@@ -53,7 +54,7 @@ module.exports = {
         "guard-for-in": "error",
         "import/extensions": ["error", { json: "always", cjs: "always" }],
       },
-      globals: { PACKAGE_JSON: "readonly" },
+      globals: { PACKAGE_JSON: "readonly", USE_ESM: "readonly" },
     },
     {
       files: [
@@ -83,6 +84,7 @@ module.exports = {
           "error",
           { version: "12.17.0", ignores: ["modules"] },
         ],
+        "@babel/development-internal/require-default-import-fallback": "error",
       },
     },
     {
@@ -93,6 +95,23 @@ module.exports = {
       ],
       rules: {
         "no-restricted-globals": ["error", ...cjsGlobals],
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: ["**/*.json"],
+            paths: [
+              {
+                name: "semver",
+                message:
+                  "semver's named exports are not recognized by the Node.js ESM-CJS interop.",
+                importNames: Object.keys(require("semver")).filter(
+                  // We use it as a type import.
+                  name => name !== "SemVer"
+                ),
+              },
+            ],
+          },
+        ],
       },
     },
     {
@@ -133,6 +152,15 @@ module.exports = {
         "import/no-extraneous-dependencies": [
           "error",
           { packageDir: "./packages/babel-plugin-transform-runtime" },
+        ],
+      },
+    },
+    {
+      files: ["packages/babel-preset-env/data/**/*.js"],
+      rules: {
+        "import/no-extraneous-dependencies": [
+          "error",
+          { packageDir: "./packages/babel-preset-env" },
         ],
       },
     },

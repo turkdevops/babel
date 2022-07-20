@@ -1,5 +1,5 @@
 FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = 509363bcfd24b3476dc106eabc0ac856ed5eb51d
+TEST262_COMMIT = 91a61b29acc087552e45a506837ab00a2f5e25a0
 TYPESCRIPT_COMMIT = ce85d647ef88183c019588bcf398320ce29b625a
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
@@ -16,7 +16,7 @@ YARN := yarn
 NODE := $(YARN) node
 
 
-.PHONY: build build-dist watch lint fix clean test-clean test-only test test-ci publish bootstrap
+.PHONY: build build-dist watch lint fix clean test-clean test-only test test-ci publish bootstrap use-esm use-cjs
 
 build: build-no-bundle
 ifneq ("$(BABEL_COVERAGE)", "true")
@@ -24,6 +24,7 @@ ifneq ("$(BABEL_COVERAGE)", "true")
 endif
 
 build-bundle: clean clean-lib
+	node ./scripts/set-module-type.js
 	$(YARN) gulp build
 	$(MAKE) build-flow-typings
 	$(MAKE) build-dist
@@ -34,6 +35,7 @@ build-no-bundle-ci: bootstrap-only
 	$(MAKE) build-dist
 
 build-no-bundle: clean clean-lib
+	node ./scripts/set-module-type.js
 	BABEL_ENV=development $(YARN) gulp build-dev
 	$(MAKE) build-flow-typings
 	$(MAKE) build-dist
@@ -186,6 +188,7 @@ prepublish:
 	$(MAKE) bootstrap-only
 	$(MAKE) prepublish-build
 	IS_PUBLISH=true $(MAKE) test
+	node ./scripts/set-module-type.js clean
 
 new-version-checklist:
 	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -221,6 +224,7 @@ ifneq ("$(I_AM_USING_VERDACCIO)", "I_AM_SURE")
 endif
 	$(YARN) release-tool version $(VERSION) --all --yes --tag-version-prefix="version-e2e-test-"
 	$(MAKE) prepublish-build
+	node ./scripts/set-module-type.js clean
 	YARN_NPM_PUBLISH_REGISTRY=http://localhost:4873 $(YARN) release-tool publish --yes --tag-version-prefix="version-e2e-test-"
 	$(MAKE) clean
 
@@ -229,6 +233,14 @@ bootstrap-only: clean-all
 
 bootstrap: bootstrap-only
 	$(MAKE) generate-tsconfig build
+
+use-cjs:
+	node ./scripts/set-module-type.js script
+	$(MAKE) bootstrap
+
+use-esm:
+	node ./scripts/set-module-type.js module
+	$(MAKE) bootstrap
 
 clean-lib:
 	$(foreach source, $(SOURCES), \

@@ -11,6 +11,14 @@ function normalize(src) {
 module.exports = function (api) {
   const env = api.env();
 
+  const outputType = api.cache.invalidate(() => {
+    try {
+      return fs.readFileSync(__dirname + "/.module-type", "utf-8").trim();
+    } catch (_) {
+      return "script";
+    }
+  });
+
   const sources = ["packages/*/src", "codemods/*/src", "eslint/*/src"];
 
   const includeCoverage = process.env.BABEL_COVERAGE === "true";
@@ -54,7 +62,8 @@ module.exports = function (api) {
   };
 
   let targets = {};
-  let convertESM = true;
+  let convertESM = outputType === "script";
+  let addImportExtension = !convertESM;
   let ignoreLib = true;
   let includeRegeneratorRuntime = false;
   let needsPolyfillsForOldNode = false;
@@ -84,6 +93,7 @@ module.exports = function (api) {
     case "standalone":
       includeRegeneratorRuntime = true;
       convertESM = false;
+      addImportExtension = false;
       ignoreLib = false;
       // rollup-commonjs will converts node_modules to ESM
       unambiguousSources.push(
@@ -92,9 +102,11 @@ module.exports = function (api) {
         "packages/babel-compat-data",
         "packages/babel-runtime/regenerator"
       );
+      targets = { ie: 7 };
       break;
     case "rollup":
       convertESM = false;
+      addImportExtension = false;
       ignoreLib = false;
       // rollup-commonjs will converts node_modules to ESM
       unambiguousSources.push(
@@ -162,7 +174,11 @@ module.exports = function (api) {
     presets: [
       [
         "@babel/preset-typescript",
-        { onlyRemoveTypeImports: true, allowDeclareFields: true },
+        {
+          onlyRemoveTypeImports: true,
+          allowDeclareFields: true,
+          optimizeConstEnums: true,
+        },
       ],
       ["@babel/env", envOpts],
       ["@babel/preset-flow", { allowDeclareFields: true }],
@@ -175,10 +191,6 @@ module.exports = function (api) {
 
       pluginPackageJsonMacro,
 
-      process.env.STRIP_BABEL_8_FLAG && [
-        pluginToggleBabel8Breaking,
-        { breaking: bool(process.env.BABEL_8_BREAKING) },
-      ],
       needsPolyfillsForOldNode && pluginPolyfillsOldNode,
     ].filter(Boolean),
     overrides: [
@@ -197,8 +209,13 @@ module.exports = function (api) {
         test: [
           "packages/babel-generator",
           "packages/babel-plugin-proposal-decorators",
+          "packages/babel-helper-string-parser",
         ].map(normalize),
         plugins: ["babel-plugin-transform-charcodes"],
+      },
+      {
+        test: ["packages/babel-generator"].map(normalize),
+        plugins: [pluginGeneratorOptimization],
       },
       convertESM && {
         test: ["./packages/babel-node/src"].map(normalize),
@@ -208,7 +225,25 @@ module.exports = function (api) {
       {
         test: sources.map(normalize),
         assumptions: sourceAssumptions,
-        plugins: [transformNamedBabelTypesImportToDestructuring],
+        plugins: [
+          transformNamedBabelTypesImportToDestructuring,
+          addImportExtension ? pluginAddImportExtension : null,
+
+          [
+            pluginToggleBooleanFlag,
+            { name: "USE_ESM", value: outputType === "module" },
+            "flag-USE_ESM",
+          ],
+
+          process.env.STRIP_BABEL_8_FLAG && [
+            pluginToggleBooleanFlag,
+            {
+              name: "process.env.BABEL_8_BREAKING",
+              value: bool(process.env.BABEL_8_BREAKING),
+            },
+            "flag-BABEL_8_BREAKING",
+          ],
+        ].filter(Boolean),
       },
       convertESM && {
         test: lazyRequireSources.map(normalize),
@@ -217,6 +252,15 @@ module.exports = function (api) {
           [
             "@babel/transform-modules-commonjs",
             { importInterop: importInteropSrc, lazy: true },
+          ],
+        ],
+      },
+      convertESM && {
+        test: ["./packages/babel-core/src"].map(normalize),
+        plugins: [
+          [
+            pluginInjectNodeReexportsHints,
+            { names: ["types", "tokTypes", "traverse", "template"] },
           ],
         ],
       },
@@ -268,12 +312,14 @@ const monorepoPackages = ["codemods", "eslint", "packages"]
   .reduce((a, b) => a.concat(b))
   .map(name => name.replace(/^babel-/, "@babel/"));
 
-function importInteropSrc(source) {
+function importInteropSrc(source, filename) {
   if (
     // These internal files are "real CJS" (whose default export is
     // on module.exports) and not compiled ESM.
     source.startsWith("@babel/compat-data/") ||
-    source.includes("babel-eslint-shared-fixtures/utils")
+    source.includes("babel-eslint-shared-fixtures/utils") ||
+    (source.includes("../data/") &&
+      /babel-preset-env[\\/]src[\\/]/.test(filename))
   ) {
     return "node";
   }
@@ -425,20 +471,19 @@ function pluginPolyfillsOldNode({ template, types: t }) {
     },
   };
 }
-
-function pluginToggleBabel8Breaking({ types: t }, { breaking }) {
+function pluginToggleBooleanFlag({ types: t }, { name, value }) {
   return {
     visitor: {
       "IfStatement|ConditionalExpression"(path) {
         let test = path.get("test");
-        let keepConsequent = breaking;
+        let keepConsequent = value;
 
         if (test.isUnaryExpression({ operator: "!" })) {
           test = test.get("argument");
           keepConsequent = !keepConsequent;
         }
 
-        // yarn-plugin-conditions inject bool(process.env.BABEL_8_BREAKING)
+        // yarn-plugin-conditions injects bool(process.env.BABEL_8_BREAKING)
         // tests, to properly cast the env variable to a boolean.
         if (
           test.isCallExpression() &&
@@ -448,7 +493,7 @@ function pluginToggleBabel8Breaking({ types: t }, { breaking }) {
           test = test.get("arguments")[0];
         }
 
-        if (!test.matchesPattern("process.env.BABEL_8_BREAKING")) return;
+        if (!test.isIdentifier({ name }) && !test.matchesPattern(name)) return;
 
         path.replaceWith(
           keepConsequent
@@ -457,7 +502,12 @@ function pluginToggleBabel8Breaking({ types: t }, { breaking }) {
         );
       },
       MemberExpression(path) {
-        if (path.matchesPattern("process.env.BABEL_8_BREAKING")) {
+        if (path.matchesPattern(name)) {
+          throw path.buildCodeFrameError("This check could not be stripped.");
+        }
+      },
+      ReferencedIdentifier(path) {
+        if (path.node.name === name) {
           throw path.buildCodeFrameError("This check could not be stripped.");
         }
       },
@@ -639,6 +689,58 @@ function pluginImportMetaUrl({ types: t, template }) {
   };
 }
 
+function pluginAddImportExtension() {
+  return {
+    visitor: {
+      "ImportDeclaration|ExportDeclaration"({ node }) {
+        const { source } = node;
+        if (!source) return;
+
+        if (source.value.startsWith(".") && !/\.[a-z]+$/.test(source.value)) {
+          const dir = pathUtils.dirname(this.filename);
+
+          try {
+            const pkg = JSON.parse(
+              fs.readFileSync(
+                pathUtils.join(dir, `${source.value}/package.json`)
+              ),
+              "utf8"
+            );
+
+            if (pkg.main) source.value = pathUtils.join(source.value, pkg.main);
+          } catch (_) {}
+
+          try {
+            if (fs.statSync(pathUtils.join(dir, source.value)).isFile()) return;
+          } catch (_) {}
+
+          for (const [src, lib = src] of [["ts", "js"], ["js"], ["cjs"]]) {
+            try {
+              fs.statSync(pathUtils.join(dir, `${source.value}.${src}`));
+              source.value += `.${lib}`;
+              return;
+            } catch (_) {}
+          }
+
+          source.value += "/index.js";
+        }
+        if (
+          source.value.startsWith("lodash/") ||
+          source.value.startsWith("core-js-compat/") ||
+          source.value === "core-js/stable/index" ||
+          source.value === "regenerator-runtime/runtime" ||
+          source.value === "babel-plugin-dynamic-import-node/utils"
+        ) {
+          source.value += ".js";
+        }
+        if (source.value.startsWith("@babel/preset-modules/")) {
+          source.value += "/index.js";
+        }
+      },
+    },
+  };
+}
+
 const tokenTypesMapping = new Map();
 const tokenTypeSourcePath = "./packages/babel-parser/src/tokenizer/types.js";
 
@@ -726,6 +828,80 @@ function pluginDynamicESLintVersionCheck({ template }) {
             ? parseInt(process.env.ESLINT_VERSION_FOR_BABEL, 10)
             : ${path.node}
         `);
+      },
+    },
+  };
+}
+
+// Inject `0 && exports.foo = 0` hints for the specified exports,
+// to help the Node.js CJS-ESM interop. This is only
+// needed when compiling ESM re-exports to CJS in `lazy` mode.
+function pluginInjectNodeReexportsHints({ types: t, template }, { names }) {
+  return {
+    visitor: {
+      Program: {
+        exit(path) {
+          const seen = [];
+          for (const stmt of path.get("body")) {
+            if (!stmt.isExpressionStatement()) continue;
+            const expr = stmt.get("expression");
+            if (
+              !expr.isCallExpression() ||
+              !expr.get("callee").matchesPattern("Object.defineProperty") ||
+              expr.node.arguments.length !== 3 ||
+              !expr.get("arguments.0").isIdentifier({ name: "exports" }) ||
+              !expr.get("arguments.1").isStringLiteral() ||
+              !names.includes(expr.node.arguments[1].value)
+            ) {
+              continue;
+            }
+
+            expr
+              .get("arguments.0")
+              .replaceWith(template.expression.ast`(0, exports)`);
+            seen.push(expr.node.arguments[1].value);
+          }
+
+          const assign = seen.reduce(
+            (rhs, name) => template.expression.ast`exports.${name} = ${rhs}`,
+            t.numericLiteral(0)
+          );
+          path.pushContainer("body", template.statement.ast`0 && (${assign})`);
+        },
+      },
+    },
+  };
+}
+
+/**
+ * @param {import("@babel/core")} pluginAPI
+ * @returns {import("@babel/core").PluginObj}
+ */
+function pluginGeneratorOptimization({ types: t }) {
+  return {
+    visitor: {
+      CallExpression: {
+        exit(path) {
+          const node = path.node;
+          if (
+            t.isMemberExpression(node.callee) &&
+            t.isThisExpression(node.callee.object)
+          ) {
+            const args = node.arguments;
+
+            if (
+              node.callee.property.name === "token" &&
+              args.length === 1 &&
+              t.isStringLiteral(args[0])
+            ) {
+              const str = args[0].value;
+              if (str.length == 1) {
+                node.callee.property.name = "tokenChar";
+                args[0] = t.numericLiteral(str.charCodeAt(0));
+              }
+            }
+          }
+        },
       },
     },
   };

@@ -7,7 +7,7 @@ import type { NodePath } from "@babel/traverse";
 export default declare(api => {
   api.assertVersion(7);
 
-  function commentFromString(comment) {
+  function commentFromString(comment: string | t.Comment): t.Comment {
     return typeof comment === "string"
       ? { type: "CommentBlock", value: comment }
       : comment;
@@ -21,12 +21,12 @@ export default declare(api => {
     comments = generateComment(ofPath, optional),
     keepType = false,
   }: {
-    ofPath?;
-    toPath?;
-    where?: string;
-    optional?;
-    comments?;
-    keepType?;
+    ofPath?: NodePath;
+    toPath?: NodePath;
+    where?: t.CommentTypeShorthand;
+    optional?: boolean;
+    comments?: string | t.Comment | (string | t.Comment)[];
+    keepType?: boolean;
   }) {
     if (!toPath?.node) {
       toPath = ofPath.getPrevSibling();
@@ -43,7 +43,7 @@ export default declare(api => {
     if (!Array.isArray(comments)) {
       comments = [comments];
     }
-    comments = comments.map(commentFromString);
+    const newComments = comments.map(commentFromString);
     if (!keepType && ofPath?.node) {
       // Removes the node at `ofPath` while conserving the comments attached
       // to it.
@@ -58,24 +58,28 @@ export default declare(api => {
       if (isSingleChild && leading) {
         parent.addComments("inner", leading);
       }
-      toPath.addComments(where, comments);
+      toPath.addComments(where, newComments);
       ofPath.remove();
       if (isSingleChild && trailing) {
         parent.addComments("inner", trailing);
       }
     } else {
-      toPath.addComments(where, comments);
+      toPath.addComments(where, newComments);
     }
   }
 
-  function wrapInFlowComment(path) {
+  function wrapInFlowComment(path: NodePath) {
     attachComment({
       ofPath: path,
-      comments: generateComment(path, path.parent.optional),
+      comments: generateComment(
+        path,
+        // @ts-expect-error
+        path.parent.optional,
+      ),
     });
   }
 
-  function generateComment(path, optional?) {
+  function generateComment(path: NodePath, optional?: boolean | void) {
     let comment = path
       .getSource()
       .replace(/\*-\//g, "*-ESCAPED/")
@@ -85,7 +89,7 @@ export default declare(api => {
     return comment;
   }
 
-  function isTypeImport(importKind) {
+  function isTypeImport(importKind: "type" | "typeof" | "value") {
     return importKind === "type" || importKind === "typeof";
   }
 
@@ -133,9 +137,9 @@ export default declare(api => {
       AssignmentPattern: {
         exit({ node }) {
           const { left } = node;
-          // @ts-ignore optional is not in ObjectPattern
+          // @ts-expect-error optional is not in ObjectPattern
           if (left.optional) {
-            // @ts-ignore optional is not in ObjectPattern
+            // @ts-expect-error optional is not in ObjectPattern
             left.optional = false;
           }
         },
@@ -149,7 +153,7 @@ export default declare(api => {
           attachComment({
             ofPath: path.get("typeParameters"),
             toPath: path.get("id"),
-            // @ts-ignore Fixme: optional is not in t.TypeParameterDeclaration
+            // @ts-expect-error Fixme: optional is not in t.TypeParameterDeclaration
             optional: node.typeParameters.optional,
           });
         }
@@ -158,7 +162,7 @@ export default declare(api => {
             ofPath: path.get("returnType"),
             toPath: path.get("body"),
             where: "leading",
-            // @ts-ignore Fixme: optional is not in t.TypeAnnotation
+            // @ts-expect-error Fixme: optional is not in t.TypeAnnotation
             optional: node.returnType.typeAnnotation.optional,
           });
         }
@@ -173,7 +177,7 @@ export default declare(api => {
           attachComment({
             ofPath: path.get("typeAnnotation"),
             toPath: path.get("key"),
-            // @ts-ignore Fixme: optional is not in t.TypeAnnotation
+            // @ts-expect-error Fixme: optional is not in t.TypeAnnotation
             optional: node.typeAnnotation.optional,
           });
         }
@@ -228,15 +232,19 @@ export default declare(api => {
             ofPath: path.get("typeAnnotation"),
             toPath: path,
             optional:
-              // @ts-ignore optional is not in ObjectPattern
+              // @ts-expect-error optional is not in ObjectPattern
               node.optional ||
-              // @ts-ignore Fixme: optional is not in t.TypeAnnotation
+              // @ts-expect-error Fixme: optional is not in t.TypeAnnotation
               node.typeAnnotation.optional,
           });
         }
       },
 
-      Flow(path) {
+      Flow(
+        path: NodePath<
+          t.Flow | t.ImportDeclaration | t.ExportDeclaration | t.ImportSpecifier
+        >,
+      ) {
         wrapInFlowComment(path);
       },
 
@@ -246,7 +254,7 @@ export default declare(api => {
         if (node.typeParameters) {
           const typeParameters = path.get("typeParameters");
           comments.push(
-            // @ts-ignore optional is not in TypeParameterDeclaration
+            // @ts-expect-error optional is not in TypeParameterDeclaration
             generateComment(typeParameters, node.typeParameters.optional),
           );
           const trailingComments = node.typeParameters.trailingComments;
@@ -272,7 +280,7 @@ export default declare(api => {
             comments.push(
               generateComment(
                 superTypeParameters,
-                // @ts-ignore optional is not in TypeParameterInstantiation
+                // @ts-expect-error optional is not in TypeParameterInstantiation
                 superTypeParameters.node.optional,
               ),
             );

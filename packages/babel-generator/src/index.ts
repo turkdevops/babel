@@ -3,6 +3,10 @@ import Printer from "./printer";
 import type * as t from "@babel/types";
 import type { Opts as jsescOptions } from "jsesc";
 import type { Format } from "./printer";
+import type {
+  RecordAndTuplePluginOptions,
+  PipelineOperatorPluginOptions,
+} from "@babel/parser";
 import type { DecodedSourceMap, Mapping } from "@jridgewell/gen-mapping";
 
 /**
@@ -13,12 +17,8 @@ import type { DecodedSourceMap, Mapping } from "@jridgewell/gen-mapping";
 class Generator extends Printer {
   constructor(
     ast: t.Node,
-    opts: {
-      sourceFileName?: string;
-      sourceMaps?: boolean;
-      sourceRoot?: string;
-    } = {},
-    code,
+    opts: GeneratorOptions = {},
+    code: string | { [filename: string]: string },
   ) {
     const format = normalizeOptions(code, opts);
     const map = opts.sourceMaps ? new SourceMap(opts, code) : null;
@@ -47,7 +47,10 @@ class Generator extends Printer {
  * - If `opts.compact = "auto"` and the code is over 500KB, `compact` will be set to `true`.
  */
 
-function normalizeOptions(code, opts): Format {
+function normalizeOptions(
+  code: string | { [filename: string]: string },
+  opts: GeneratorOptions,
+): Format {
   const format: Format = {
     auxiliaryCommentBefore: opts.auxiliaryCommentBefore,
     auxiliaryCommentAfter: opts.auxiliaryCommentAfter,
@@ -63,7 +66,6 @@ function normalizeOptions(code, opts): Format {
       style: "  ",
       base: 0,
     },
-    decoratorsBeforeExport: !!opts.decoratorsBeforeExport,
     jsescOption: {
       quotes: "double",
       wrap: true,
@@ -75,6 +77,7 @@ function normalizeOptions(code, opts): Format {
   };
 
   if (!process.env.BABEL_8_BREAKING) {
+    format.decoratorsBeforeExport = !!opts.decoratorsBeforeExport;
     format.jsonCompatibleStrings = opts.jsonCompatibleStrings;
   }
 
@@ -88,8 +91,8 @@ function normalizeOptions(code, opts): Format {
       format.shouldPrintComment ||
       (value =>
         format.comments ||
-        value.indexOf("@license") >= 0 ||
-        value.indexOf("@preserve") >= 0);
+        value.includes("@license") ||
+        value.includes("@preserve"));
   }
 
   if (format.compact === "auto") {
@@ -183,12 +186,14 @@ export interface GeneratorOptions {
 
   /**
    * Set to true to run jsesc with "json": true to print "\u00A9" vs. "©";
+   * @deprecated use `jsescOptions: { json: true }` instead
    */
   jsonCompatibleStrings?: boolean;
 
   /**
    * Set to true to enable support for experimental decorators syntax before module exports.
    * Defaults to `false`.
+   * @deprecated Removed in Babel 8
    */
   decoratorsBeforeExport?: boolean;
 
@@ -200,24 +205,24 @@ export interface GeneratorOptions {
   /**
    * For use with the recordAndTuple token.
    */
-  recordAndTupleSyntaxType?: "hash" | "bar";
+  recordAndTupleSyntaxType?: RecordAndTuplePluginOptions["syntaxType"];
   /**
    * For use with the Hack-style pipe operator.
    * Changes what token is used for pipe bodies’ topic references.
    */
-  topicToken?: "^^" | "@@" | "^" | "%" | "#";
+  topicToken?: PipelineOperatorPluginOptions["topicToken"];
 }
 
 export interface GeneratorResult {
   code: string;
   map: {
     version: number;
-    sources: string[];
-    names: string[];
+    sources: readonly string[];
+    names: readonly string[];
     sourceRoot?: string;
-    sourcesContent?: string[];
+    sourcesContent?: readonly string[];
     mappings: string;
-    file: string;
+    file?: string;
   } | null;
   decodedMap: DecodedSourceMap | undefined;
   rawMappings: Mapping[] | undefined;

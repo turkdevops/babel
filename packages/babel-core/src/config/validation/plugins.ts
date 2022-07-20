@@ -14,7 +14,7 @@ import type {
 import type { ParserOptions } from "@babel/parser";
 import type { Visitor } from "@babel/traverse";
 import type { ValidatedOptions } from "./options";
-import type { File, PluginPass } from "../../..";
+import type { File, PluginPass } from "../../index";
 
 // Note: The casts here are just meant to be static assertions to make sure
 // that the assertion functions actually assert that the value's type matches
@@ -40,7 +40,6 @@ function assertVisitorMap(loc: OptionPath, value: unknown): Visitor {
   if (obj) {
     Object.keys(obj).forEach(prop => assertVisitorHandler(prop, obj[prop]));
 
-    // @ts-ignore
     if (obj.enter || obj.exit) {
       throw new Error(
         `${msg(
@@ -92,7 +91,9 @@ export type PluginObject<S extends PluginPass = PluginPass> = {
   generatorOverride?: Function;
 };
 
-export function validatePluginObject(obj: {}): PluginObject {
+export function validatePluginObject(obj: {
+  [key: string]: unknown;
+}): PluginObject {
   const rootPath: RootPath = {
     type: "root",
     source: "plugin",

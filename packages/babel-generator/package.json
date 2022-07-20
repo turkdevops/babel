@@ -1,6 +1,6 @@
 {
   "name": "@babel/generator",
-  "version": "7.18.0",
+  "version": "7.18.9",
   "description": "Turns an AST into code.",
   "author": "The Babel Team (https://babel.dev/team)",
   "license": "MIT",
@@ -20,7 +20,7 @@
   ],
   "dependencies": {
     "@babel/types": "workspace:^",
-    "@jridgewell/gen-mapping": "^0.3.0",
+    "@jridgewell/gen-mapping": "^0.3.2",
     "jsesc": "condition: BABEL_8_BREAKING ? ^3.0.2 : ^2.5.1"
   },
   "devDependencies": {
@@ -39,10 +39,17 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

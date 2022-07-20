@@ -1,6 +1,6 @@
 {
   "name": "@babel/parser",
-  "version": "7.18.0",
+  "version": "7.18.9",
   "description": "A JavaScript parser",
   "author": "The Babel Team (https://babel.dev/team)",
   "homepage": "https://babel.dev/docs/en/next/babel-parser",
@@ -27,7 +27,8 @@
   "files": [
     "bin",
     "lib",
-    "typings"
+    "typings",
+    "index.cjs"
   ],
   "engines": {
     "node": ">=6.0.0"
@@ -36,6 +37,7 @@
     "@babel/code-frame": "workspace:^",
     "@babel/helper-check-duplicate-nodes": "workspace:^",
     "@babel/helper-fixtures": "workspace:^",
+    "@babel/helper-string-parser": "workspace:^",
     "@babel/helper-validator-identifier": "workspace:^",
     "charcodes": "^0.2.0"
   },
@@ -46,10 +48,27 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module",
+        "exports": {
+          ".": {
+            "require": "./lib/index.cjs",
+            "default": "./lib/index.js"
+          },
+          "./package.json": "./package.json"
+        }
+      },
+      null
     ]
   },
   "exports": {
-    ".": "./lib/index.js",
+    ".": {
+      "require": "./index.cjs",
+      "default": "./lib/index.js"
+    },
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

@@ -1,6 +1,6 @@
 {
   "name": "@babel/runtime",
-  "version": "7.18.0",
+  "version": "7.18.9",
   "description": "babel's modular runtime helpers",
   "license": "MIT",
   "publishConfig": {
@@ -871,5 +871,14 @@
   },
   "engines": {
     "node": ">=6.9.0"
+  },
+  "type": "commonjs",
+  "conditions": {
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
+    ]
   }
 }

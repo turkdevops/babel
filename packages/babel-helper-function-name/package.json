@@ -1,6 +1,6 @@
 {
   "name": "@babel/helper-function-name",
-  "version": "7.17.9",
+  "version": "7.18.9",
   "description": "Helper function to change the property 'name' of every function",
   "repository": {
     "type": "git",
@@ -27,10 +27,17 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

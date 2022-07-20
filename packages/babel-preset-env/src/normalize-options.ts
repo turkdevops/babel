@@ -1,7 +1,9 @@
-import corejs3Polyfills from "core-js-compat/data.json";
-import { coerce } from "semver";
-import type { SemVer } from "semver";
+import semver, { type SemVer } from "semver";
 import corejs2Polyfills from "@babel/compat-data/corejs2-built-ins";
+// @ts-expect-error Fixme: TS can not infer types from ../data/core-js-compat.js
+// but we can't import core-js-compat/data.json because JSON imports does
+// not work on Node 14
+import corejs3Polyfills from "../data/core-js-compat";
 import { plugins as pluginsList } from "./plugins-compat-data";
 import moduleTransformations from "./module-transformations";
 import { TopLevelOptions, ModulesOption, UseBuiltInsOption } from "./options";
@@ -113,10 +115,11 @@ export const checkDuplicateIncludeExcludes = (
   );
 };
 
-const normalizeTargets = (targets): Options["targets"] => {
+const normalizeTargets = (
+  targets: string | string[] | Options["targets"],
+): Options["targets"] => {
   // TODO: Allow to use only query or strings as a targets from next breaking change.
   if (typeof targets === "string" || Array.isArray(targets)) {
-    // @ts-expect-error
     return { browsers: targets };
   }
   return { ...targets };
@@ -126,6 +129,7 @@ export const validateModulesOption = (
   modulesOpt: ModuleOption = ModulesOption.auto,
 ) => {
   v.invariant(
+    // @ts-expect-error we have provided fallback for undefined keys
     ModulesOption[modulesOpt.toString()] || modulesOpt === ModulesOption.false,
     `The 'modules' option must be one of \n` +
       ` - 'false' to indicate no module processing\n` +
@@ -141,6 +145,7 @@ export const validateUseBuiltInsOption = (
   builtInsOpt: BuiltInsOption = false,
 ) => {
   v.invariant(
+    // @ts-expect-error we have provided fallback for undefined keys
     UseBuiltInsOption[builtInsOpt.toString()] ||
       builtInsOpt === UseBuiltInsOption.false,
     `The 'useBuiltIns' option must be either
@@ -188,7 +193,7 @@ export function normalizeCoreJSOption(
     rawVersion = corejs;
   }
 
-  const version = rawVersion ? coerce(String(rawVersion)) : false;
+  const version = rawVersion ? semver.coerce(String(rawVersion)) : false;
 
   if (!useBuiltIns && version) {
     console.warn(
@@ -262,7 +267,7 @@ export default function normalizeOptions(opts: Options) {
     spec: v.validateBooleanOption(TopLevelOptions.spec, opts.spec, false),
     targets: normalizeTargets(opts.targets),
     useBuiltIns: useBuiltIns,
-    browserslistEnv: v.validateStringOption(
+    browserslistEnv: v.validateStringOption<string>(
       TopLevelOptions.browserslistEnv,
       opts.browserslistEnv,
     ),

@@ -2,7 +2,7 @@ import { parse } from "@babel/parser";
 import * as t from "@babel/types";
 
 import _traverse, { NodePath } from "../lib/index.js";
-const traverse = _traverse.default;
+const traverse = _traverse.default || _traverse;
 
 function getPath(code, options) {
   const ast =
@@ -653,7 +653,7 @@ describe("scope", () => {
     describe("duplicate declaration", () => {
       it("should not throw error on duplicate class and function declaration", () => {
         const ast = [
-          t.classDeclaration(t.identifier("A"), t.super(), t.classBody([]), []),
+          t.classDeclaration(t.identifier("A"), null, t.classBody([]), []),
           t.functionDeclaration(t.identifier("A"), [], t.blockStatement([])),
         ];
 

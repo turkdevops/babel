@@ -58,7 +58,7 @@ const unescapedDoubleQuoteRE = /(?:^|[^\\])(?:\\\\)*"/;
 
 export function DirectiveLiteral(this: Printer, node: t.DirectiveLiteral) {
   const raw = this.getPossibleRaw(node);
-  if (!this.format.minified && raw != null) {
+  if (!this.format.minified && raw !== undefined) {
     this.token(raw);
     return;
   }
@@ -85,7 +85,7 @@ export function InterpreterDirective(
   this: Printer,
   node: t.InterpreterDirective,
 ) {
-  this.token(`#!${node.value}\n`);
+  this.token(`#!${node.value}\n`, true);
 }
 
 export function Placeholder(this: Printer, node: t.Placeholder) {

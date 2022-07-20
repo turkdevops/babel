@@ -1,10 +1,12 @@
-import gensync from "gensync";
+import gensync, { type Handler } from "gensync";
 
 import loadConfig from "./config";
 import type { InputOptions, ResolvedConfig } from "./config";
 import { run } from "./transformation";
 
 import type { FileResult, FileResultCallback } from "./transformation";
+
+export type { FileResult } from "./transformation";
 
 type Transform = {
   (code: string, callback: FileResultCallback): void;
@@ -16,24 +18,43 @@ type Transform = {
   (code: string, opts?: InputOptions | null): FileResult | null;
 };
 
-const transformRunner = gensync<
-  (code: string, opts?: InputOptions) => FileResult | null
->(function* transform(code, opts) {
+const transformRunner = gensync(function* transform(
+  code: string,
+  opts?: InputOptions,
+): Handler<FileResult | null> {
   const config: ResolvedConfig | null = yield* loadConfig(opts);
   if (config === null) return null;
 
   return yield* run(config, code);
 });
 
-export const transform: Transform = function transform(code, opts?, callback?) {
-  if (typeof opts === "function") {
-    callback = opts;
+export const transform: Transform = function transform(
+  code,
+  optsOrCallback?: InputOptions | null | undefined | FileResultCallback,
+  maybeCallback?: FileResultCallback,
+) {
+  let opts: InputOptions | undefined | null;
+  let callback: FileResultCallback | undefined;
+  if (typeof optsOrCallback === "function") {
+    callback = optsOrCallback;
     opts = undefined;
+  } else {
+    opts = optsOrCallback;
+    callback = maybeCallback;
   }
 
-  // For backward-compat with Babel 6, we allow sync transformation when
-  // no callback is given. Will be dropped in some future Babel major version.
-  if (callback === undefined) return transformRunner.sync(code, opts);
+  if (callback === undefined) {
+    if (process.env.BABEL_8_BREAKING) {
+      throw new Error(
+        "Starting from Babel 8.0.0, the 'transform' function expects a callback. If you need to call it synchronously, please use 'transformSync'.",
+      );
+    } else {
+      // console.warn(
+      //   "Starting from Babel 8.0.0, the 'transform' function will expect a callback. If you need to call it synchronously, please use 'transformSync'.",
+      // );
+      return transformRunner.sync(code, opts);
+    }
+  }
 
   transformRunner.errback(code, opts, callback);
 };

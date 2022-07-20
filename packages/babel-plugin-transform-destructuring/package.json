@@ -1,6 +1,6 @@
 {
   "name": "@babel/plugin-transform-destructuring",
-  "version": "7.18.0",
+  "version": "7.18.9",
   "description": "Compile ES2015 destructuring to ES5",
   "repository": {
     "type": "git",
@@ -37,10 +37,17 @@
       {
         "exports": null
       }
+    ],
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
     ]
   },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "type": "commonjs"
 }

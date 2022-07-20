@@ -1,7 +1,7 @@
-const reportErrorMessageFormat = require("./rules/report-error-message-format.cjs");
-
 const rules = {
-  "report-error-message-format": reportErrorMessageFormat,
+  "report-error-message-format": require("./rules/report-error-message-format.cjs"),
+  "require-default-import-fallback": require("./rules/require-default-import-fallback.cjs"),
+  "disallow-ts-ignore": require("./rules/disallow-ts-ignore.cjs"),
 };
 
 exports.rules = rules;

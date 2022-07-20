@@ -154,15 +154,17 @@ export default declare((api, options: Options) => {
     ? {
         build: buildForOfNoIteratorClosing,
         helper: "createForOfIteratorHelperLoose",
-        getContainer: nodes => nodes,
+        getContainer: (nodes: t.Statement[]): [t.ForStatement] =>
+          nodes as [t.ForStatement],
       }
     : {
         build: buildForOf,
         helper: "createForOfIteratorHelper",
-        getContainer: nodes => nodes[1].block.body,
+        getContainer: (nodes: t.Statement[]): [t.ForStatement] =>
+          (nodes[1] as t.TryStatement).block.body as [t.ForStatement],
       };
 
-  function _ForOfStatementArray(path) {
+  function _ForOfStatementArray(path: NodePath<t.ForOfStatement>) {
     const { node, scope } = path;
 
     const right = scope.generateUidIdentifierBasedOnNode(node.right, "arr");
@@ -206,8 +208,10 @@ export default declare((api, options: Options) => {
         const right = path.get("right");
         if (
           right.isArrayExpression() ||
-          right.isGenericType("Array") ||
-          t.isArrayTypeAnnotation(right.getTypeAnnotation())
+          (process.env.BABEL_8_BREAKING
+            ? right.isGenericType("Array")
+            : right.isGenericType("Array") ||
+              t.isArrayTypeAnnotation(right.getTypeAnnotation()))
         ) {
           path.replaceWith(_ForOfStatementArray(path));
           return;
@@ -257,6 +261,7 @@ export default declare((api, options: Options) => {
         t.inherits(container[0].body, node.body);
 
         if (t.isLabeledStatement(parent)) {
+          // @ts-expect-error replacing node types
           container[0] = t.labeledStatement(parent.label, container[0]);
 
           path.parentPath.replaceWithMultiple(nodes);

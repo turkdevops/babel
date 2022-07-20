@@ -13,7 +13,6 @@ import {
   type TokenType,
   tokenIsTemplate,
   tokenCanStartExpression,
-  tokenIsBinaryOperator,
 } from "../../tokenizer/types";
 import { types as tc } from "../../tokenizer/context";
 import * as N from "../../types";
@@ -64,12 +63,6 @@ function assert(x: boolean): void {
   if (!x) {
     throw new Error("Assert fail");
   }
-}
-
-function tsTokenCanStartExpression(token: TokenType) {
-  // tsc considers binary operators as "can start expression" tokens:
-  // https://github.com/microsoft/TypeScript/blob/eca1b4/src/compiler/parser.ts#L4260-L4266
-  return tokenCanStartExpression(token) || tokenIsBinaryOperator(token);
 }
 
 type ParsingContext =
@@ -173,6 +166,10 @@ const TSErrors = ParseErrorEnum`typescript`(_ => ({
   InvalidModifiersOrder: _<{| orderedModifiers: [TsModifier, TsModifier] |}>(
     ({ orderedModifiers }) =>
       `'${orderedModifiers[0]}' modifier must precede '${orderedModifiers[1]}' modifier.`,
+  ),
+  InvalidPropertyAccessAfterInstantiationExpression: _(
+    "Invalid property access after an instantiation expression. " +
+      "You can either wrap the instantiation expression in parentheses, or delete the type arguments.",
   ),
   InvalidTupleMemberLabel: _(
     "Tuple members must be labeled with a simple identifier.",
@@ -1163,7 +1160,9 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         if (abstract) this.next();
         this.next(); // eat `new`
       }
-      this.tsFillSignature(tt.arrow, node);
+      this.tsInAllowConditionalTypesContext(() =>
+        this.tsFillSignature(tt.arrow, node),
+      );
       return this.finishNode(node, type);
     }
 
@@ -2427,11 +2426,11 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           }
 
           const typeArguments = this.tsParseTypeArgumentsInExpression();
-          if (!typeArguments) throw this.unexpected();
+          if (!typeArguments) return;
 
           if (isOptionalCall && !this.match(tt.parenL)) {
             missingParenErrorLoc = this.state.curPosition();
-            throw this.unexpected();
+            return;
           }
 
           if (tokenIsTemplate(this.state.type)) {
@@ -2467,19 +2466,17 @@ export default (superClass: Class<Parser>): Class<Parser> =>
             return this.finishCallExpression(node, state.optionalChainMember);
           }
 
-          // TODO: This doesn't exactly match what TS does when it comes to ASI.
-          // For example,
-          //   a<b>
-          //   if (0);
-          // is not valid TS code (https://github.com/microsoft/TypeScript/issues/48654)
-          // However, it should correctly parse anything that is correctly parsed by TS.
+          const tokenType = this.state.type;
           if (
-            tsTokenCanStartExpression(this.state.type) &&
-            this.state.type !== tt.parenL
+            // a<b>>c is not (a<b>)>c, but a<(b>>c)
+            tokenType === tt.gt ||
+            // a<b>c is (a<b)>c
+            (tokenType !== tt.parenL &&
+              tokenCanStartExpression(tokenType) &&
+              !this.hasPrecedingLineBreak())
           ) {
-            // Bail out. We have something like a<b>c, which is not an expression with
-            // type arguments but an (a < b) > c comparison.
-            throw this.unexpected();
+            // Bail out.
+            return;
           }
 
           const node: N.TsInstantiationExpression = this.startNodeAt(
@@ -2495,7 +2492,20 @@ export default (superClass: Class<Parser>): Class<Parser> =>
           this.unexpected(missingParenErrorLoc, tt.parenL);
         }
 
-        if (result) return result;
+        if (result) {
+          if (
+            result.type === "TSInstantiationExpression" &&
+            (this.match(tt.dot) ||
+              (this.match(tt.questionDot) &&
+                this.lookaheadCharCode() !== charCodes.leftParenthesis))
+          ) {
+            this.raise(
+              TSErrors.InvalidPropertyAccessAfterInstantiationExpression,
+              { at: this.state.startLoc },
+            );
+          }
+          return result;
+        }
       }
 
       return super.parseSubscript(base, startPos, startLoc, noCalls, state);
@@ -3231,10 +3241,12 @@ export default (superClass: Class<Parser>): Class<Parser> =>
 
       // Either way, we're looking at a '<': tt.jsxTagStart or relational.
 
-      let typeParameters: ?N.TsTypeParameterDeclaration;
-      let invalidSingleType: ?N.TsTypeParameter;
-      state = state || this.state.clone();
+      // If the state was cloned in the JSX parsing branch above but there
+      // have been any error in the tryParse call, this.state is set to state
+      // so we still need to clone it.
+      if (!state || state === this.state) state = this.state.clone();
 
+      let typeParameters: ?N.TsTypeParameterDeclaration;
       const arrow = this.tryParse(abort => {
         // This is similar to TypeScript's `tryParseParenthesizedArrowFunctionExpression`.
         typeParameters = this.tsParseTypeParameters();
@@ -3253,31 +3265,27 @@ export default (superClass: Class<Parser>): Class<Parser> =>
         }
         expr.typeParameters = typeParameters;
 
-        // report error if single type parameter used without trailing comma.
-        if (
-          this.hasPlugin("jsx") &&
-          expr.typeParameters.params.length === 1 &&
-          !expr.typeParameters.extra?.trailingComma
-        ) {
-          const parameter = expr.typeParameters.params[0];
-          if (!parameter.constraint) {
-            // A single type parameter must either have constraints
-            // or a trailing comma, otherwise it's ambiguous with JSX.
-            invalidSingleType = parameter;
+        if (process.env.BABEL_8_BREAKING) {
+          if (
+            this.hasPlugin("jsx") &&
+            expr.typeParameters.params.length === 1 &&
+            !expr.typeParameters.extra?.trailingComma
+          ) {
+            // report error if single type parameter used without trailing comma.
+            const parameter = expr.typeParameters.params[0];
+            if (!parameter.constraint) {
+              // A single type parameter must either have constraints
+              // or a trailing comma, otherwise it's ambiguous with JSX.
+              this.raise(TSErrors.SingleTypeParameterWithoutTrailingComma, {
+                at: createPositionWithColumnOffset(parameter.loc.end, 1),
+                typeParameterName: parameter.name.name,
+              });
+            }
           }
         }
 
         return expr;
       }, state);
-
-      if (process.env.BABEL_8_BREAKING) {
-        if (invalidSingleType) {
-          this.raise(TSErrors.SingleTypeParameterWithoutTrailingComma, {
-            at: createPositionWithColumnOffset(invalidSingleType.loc.end, 1),
-            typeParameterName: invalidSingleType.name.name,
-          });
-        }
-      }
 
       /*:: invariant(arrow.node != null) */
       if (!arrow.error && !arrow.aborted) {

@@ -1,15 +1,17 @@
 import path from "path";
 import fs from "fs";
 import { createRequire } from "module";
-import helpers from "@babel/helpers";
-import babel from "@babel/core";
+import * as helpers from "@babel/helpers";
+import { transformFromAstSync, File } from "@babel/core";
 import template from "@babel/template";
-import t from "@babel/types";
+import * as t from "@babel/types";
 import { fileURLToPath } from "url";
 
 import transformRuntime from "../lib/index.js";
 import corejs2Definitions from "./runtime-corejs2-definitions.js";
 import corejs3Definitions from "./runtime-corejs3-definitions.js";
+
+import presetEnv from "@babel/preset-env";
 
 const require = createRequire(import.meta.url);
 const runtimeVersion = require("@babel/runtime/package.json").version;
@@ -217,7 +219,7 @@ function buildHelper(
 
   if (!esm) {
     bindings = [];
-    helpers.ensure(helperName, babel.File);
+    helpers.ensure(helperName, File);
     for (const dep of helpers.getDependencies(helperName)) {
       const id = (dependencies[dep] = t.identifier(t.toIdentifier(dep)));
       tree.body.push(template.statement.ast`
@@ -235,9 +237,9 @@ function buildHelper(
   );
   tree.body.push(...helper.nodes);
 
-  return babel.transformFromAst(tree, null, {
+  return transformFromAstSync(tree, null, {
     filename: helperFilename,
-    presets: [["@babel/preset-env", { modules: false }]],
+    presets: [[presetEnv, { modules: false }]],
     plugins: [
       [transformRuntime, { corejs, version: runtimeVersion }],
       buildRuntimeRewritePlugin(runtimeName, helperName),

@@ -1,4 +1,4 @@
-import type { HubInterface, NodePath, Scope } from "@babel/traverse";
+import type { NodePath, Scope } from "@babel/traverse";
 import traverse from "@babel/traverse";
 import memberExpressionToFunctions from "@babel/helper-member-expression-to-functions";
 import type { HandlerState } from "@babel/helper-member-expression-to-functions";
@@ -16,6 +16,7 @@ import {
   thisExpression,
 } from "@babel/types";
 import type * as t from "@babel/types";
+import type { File } from "@babel/core";
 
 // TODO (Babel 8): Don't export this.
 export {
@@ -23,6 +24,12 @@ export {
   skipAllButComputedKey,
 } from "@babel/helper-environment-visitor";
 
+type ThisRef =
+  | {
+      memo: t.AssignmentExpression;
+      this: t.Identifier;
+    }
+  | { this: t.ThisExpression };
 /**
  * Creates an expression which result is the proto of objectRef.
  *
@@ -34,7 +41,12 @@ export {
  *
  *   helpers.getPrototypeOf(CLASS.prototype)
  */
-function getPrototypeOfExpression(objectRef, isStatic, file, isPrivateMethod) {
+function getPrototypeOfExpression(
+  objectRef: t.Identifier,
+  isStatic: boolean,
+  file: File,
+  isPrivateMethod: boolean,
+) {
   objectRef = cloneNode(objectRef);
   const targetRef =
     isStatic || isPrivateMethod
@@ -72,8 +84,46 @@ const unshadowSuperBindingVisitor = traverse.visitors.merge<{
   },
 ]);
 
-const specHandlers = {
-  memoise(superMember, count) {
+type SharedState = {
+  file: File;
+  scope: Scope;
+  isDerivedConstructor: boolean;
+  isStatic: boolean;
+  isPrivateMethod: boolean;
+  getObjectRef: () => t.Identifier;
+  getSuperRef: () => t.Identifier;
+  // we dont need boundGet here, but memberExpressionToFunctions handler needs it.
+  boundGet: HandlerState["get"];
+};
+
+type Handler = HandlerState<SharedState> & SharedState;
+type SuperMember = NodePath<
+  | t.MemberExpression & {
+      object: t.Super;
+      property: Exclude<t.MemberExpression["property"], t.PrivateName>;
+    }
+>;
+
+interface SpecHandler
+  extends Pick<
+    Handler,
+    "get" | "set" | "destructureSet" | "call" | "optionalCall" | "memoise"
+  > {
+  _get(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    thisRefs: ThisRef,
+  ): t.CallExpression;
+  _getThisRefs(): ThisRef;
+  prop(this: Handler & SpecHandler, superMember: SuperMember): t.Expression;
+}
+
+const specHandlers: SpecHandler = {
+  memoise(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    count: number,
+  ) {
     const { scope, node } = superMember;
     const { computed, property } = node;
     if (!computed) {
@@ -88,7 +138,7 @@ const specHandlers = {
     this.memoiser.set(property, memo, count);
   },
 
-  prop(superMember) {
+  prop(this: Handler & SpecHandler, superMember: SuperMember) {
     const { computed, property } = superMember.node;
     if (this.memoiser.has(property)) {
       return cloneNode(this.memoiser.get(property));
@@ -98,14 +148,18 @@ const specHandlers = {
       return cloneNode(property);
     }
 
-    return stringLiteral(property.name);
+    return stringLiteral((property as t.Identifier).name);
   },
 
-  get(superMember) {
+  get(this: Handler & SpecHandler, superMember: SuperMember) {
     return this._get(superMember, this._getThisRefs());
   },
 
-  _get(superMember, thisRefs) {
+  _get(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    thisRefs: ThisRef,
+  ) {
     const proto = getPrototypeOfExpression(
       this.getObjectRef(),
       this.isStatic,
@@ -113,13 +167,14 @@ const specHandlers = {
       this.isPrivateMethod,
     );
     return callExpression(this.file.addHelper("get"), [
+      // @ts-expect-error memo does not exist when this.isDerivedConstructor is false
       thisRefs.memo ? sequenceExpression([thisRefs.memo, proto]) : proto,
       this.prop(superMember),
       thisRefs.this,
     ]);
   },
 
-  _getThisRefs() {
+  _getThisRefs(this: Handler & SpecHandler): ThisRef {
     if (!this.isDerivedConstructor) {
       return { this: thisExpression() };
     }
@@ -130,7 +185,11 @@ const specHandlers = {
     };
   },
 
-  set(superMember, value) {
+  set(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    value: t.Expression,
+  ) {
     const thisRefs = this._getThisRefs();
     const proto = getPrototypeOfExpression(
       this.getObjectRef(),
@@ -139,6 +198,7 @@ const specHandlers = {
       this.isPrivateMethod,
     );
     return callExpression(this.file.addHelper("set"), [
+      // @ts-expect-error memo does not exist when this.isDerivedConstructor is false
       thisRefs.memo ? sequenceExpression([thisRefs.memo, proto]) : proto,
       this.prop(superMember),
       value,
@@ -147,13 +207,17 @@ const specHandlers = {
     ]);
   },
 
-  destructureSet(superMember) {
+  destructureSet(this: Handler & SpecHandler, superMember: SuperMember) {
     throw superMember.buildCodeFrameError(
       `Destructuring to a super field is not supported yet.`,
     );
   },
 
-  call(superMember, args) {
+  call(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    args: t.CallExpression["arguments"],
+  ) {
     const thisRefs = this._getThisRefs();
     return optimiseCall(
       this._get(superMember, thisRefs),
@@ -163,7 +227,11 @@ const specHandlers = {
     );
   },
 
-  optionalCall(superMember, args) {
+  optionalCall(
+    this: Handler & SpecHandler,
+    superMember: SuperMember,
+    args: t.CallExpression["arguments"],
+  ) {
     const thisRefs = this._getThisRefs();
     return optimiseCall(
       this._get(superMember, thisRefs),
@@ -177,7 +245,7 @@ const specHandlers = {
 const looseHandlers = {
   ...specHandlers,
 
-  prop(superMember) {
+  prop(this: Handler & typeof specHandlers, superMember: SuperMember) {
     const { property } = superMember.node;
     if (this.memoiser.has(property)) {
       return cloneNode(this.memoiser.get(property));
@@ -186,7 +254,7 @@ const looseHandlers = {
     return cloneNode(property);
   },
 
-  get(superMember) {
+  get(this: Handler & typeof specHandlers, superMember: SuperMember) {
     const { isStatic, getSuperRef } = this;
     const { computed } = superMember.node;
     const prop = this.prop(superMember);
@@ -206,7 +274,11 @@ const looseHandlers = {
     return memberExpression(object, prop, computed);
   },
 
-  set(superMember, value) {
+  set(
+    this: Handler & typeof specHandlers,
+    superMember: SuperMember,
+    value: t.Expression,
+  ) {
     const { computed } = superMember.node;
     const prop = this.prop(superMember);
 
@@ -217,26 +289,44 @@ const looseHandlers = {
     );
   },
 
-  destructureSet(superMember) {
+  destructureSet(
+    this: Handler & typeof specHandlers,
+    superMember: SuperMember,
+  ) {
     const { computed } = superMember.node;
     const prop = this.prop(superMember);
 
     return memberExpression(thisExpression(), prop, computed);
   },
 
-  call(superMember, args) {
+  call(
+    this: Handler & typeof specHandlers,
+    superMember: SuperMember,
+    args: t.CallExpression["arguments"],
+  ) {
     return optimiseCall(this.get(superMember), thisExpression(), args, false);
   },
 
-  optionalCall(superMember, args) {
+  optionalCall(
+    this: Handler & typeof specHandlers,
+    superMember: SuperMember,
+    args: t.CallExpression["arguments"],
+  ) {
     return optimiseCall(this.get(superMember), thisExpression(), args, true);
   },
 };
 
 type ReplaceSupersOptionsBase = {
-  methodPath: NodePath<any>;
+  methodPath: NodePath<
+    | t.ClassMethod
+    | t.ClassProperty
+    | t.ObjectMethod
+    | t.ClassPrivateMethod
+    | t.ClassPrivateProperty
+    | t.StaticBlock
+  >;
   constantSuper?: boolean;
-  file: any;
+  file: File;
   // objectRef might have been shadowed in child scopes,
   // in that case, we need to rename related variables.
   refToPreserve?: t.Identifier;
@@ -253,7 +343,7 @@ type ReplaceSupersOptions = ReplaceSupersOptionsBase &
   );
 
 interface ReplaceState {
-  file: unknown;
+  file: File;
   scope: Scope;
   isDerivedConstructor: boolean;
   isStatic: boolean;
@@ -270,7 +360,10 @@ export default class ReplaceSupers {
     this.isDerivedConstructor =
       path.isClassMethod({ kind: "constructor" }) && !!opts.superRef;
     this.isStatic =
-      path.isObjectMethod() || path.node.static || path.isStaticBlock?.();
+      path.isObjectMethod() ||
+      // @ts-expect-error static is not in ClassPrivateMethod
+      path.node.static ||
+      path.isStaticBlock?.();
     this.isPrivateMethod = path.isPrivate() && path.isMethod();
 
     this.file = opts.file;
@@ -281,7 +374,7 @@ export default class ReplaceSupers {
     this.opts = opts;
   }
 
-  declare file: HubInterface;
+  declare file: File;
   declare isDerivedConstructor: boolean;
   declare constantSuper: boolean;
   declare isPrivateMethod: boolean;
@@ -290,12 +383,21 @@ export default class ReplaceSupers {
   declare opts: ReplaceSupersOptions;
 
   getObjectRef() {
-    return cloneNode(this.opts.objectRef || this.opts.getObjectRef());
+    return cloneNode(
+      this.opts.objectRef ||
+        // @ts-expect-error https://github.com/microsoft/TypeScript/issues/49643
+        this.opts.getObjectRef(),
+    );
   }
 
   getSuperRef() {
     if (this.opts.superRef) return cloneNode(this.opts.superRef);
-    if (this.opts.getSuperRef) return cloneNode(this.opts.getSuperRef());
+    if (this.opts.getSuperRef) {
+      return cloneNode(
+        // @ts-expect-error https://github.com/microsoft/TypeScript/issues/49643
+        this.opts.getSuperRef(),
+      );
+    }
   }
 
   replace() {

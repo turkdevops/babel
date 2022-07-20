@@ -5,9 +5,8 @@ import splitExportDeclaration from "@babel/helper-split-export-declaration";
 import { types as t } from "@babel/core";
 import globals from "globals";
 import transformClass from "./transformClass";
-import type { Visitor, NodePath } from "@babel/traverse";
 
-const getBuiltinClasses = category =>
+const getBuiltinClasses = (category: keyof typeof globals) =>
   Object.keys(globals[category]).filter(name => /^[A-Z]/.test(name));
 
 const builtinClasses = new Set([
@@ -33,7 +32,7 @@ export default declare((api, options: Options) => {
   const noClassCalls = (api.assumption("noClassCalls") ?? loose) as boolean;
 
   // todo: investigate traversal requeueing
-  const VISITED = Symbol();
+  const VISITED = new WeakSet();
 
   return {
     name: "transform-classes",
@@ -58,7 +57,7 @@ export default declare((api, options: Options) => {
 
       ClassExpression(path, state) {
         const { node } = path;
-        if (node[VISITED]) return;
+        if (VISITED.has(node)) return;
 
         const inferred = nameFunction(path);
         if (inferred && inferred !== node) {
@@ -66,9 +65,9 @@ export default declare((api, options: Options) => {
           return;
         }
 
-        node[VISITED] = true;
+        VISITED.add(node);
 
-        path.replaceWith(
+        const [replacedPath] = path.replaceWith(
           transformClass(path, state.file, builtinClasses, loose, {
             setClassMethods,
             constantSuper,
@@ -77,16 +76,15 @@ export default declare((api, options: Options) => {
           }),
         );
 
-        if (path.isCallExpression()) {
-          annotateAsPure(path);
-          // todo: improve babel types
-          const callee = path.get("callee") as unknown as NodePath;
+        if (replacedPath.isCallExpression()) {
+          annotateAsPure(replacedPath);
+          const callee = replacedPath.get("callee");
           if (callee.isArrowFunctionExpression()) {
             // This is an IIFE, so we don't need to worry about the noNewArrows assumption
             callee.arrowFunctionToExpression();
           }
         }
       },
-    } as Visitor<any>,
+    },
   };
 });

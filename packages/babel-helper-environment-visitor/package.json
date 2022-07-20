@@ -1,6 +1,6 @@
 {
   "name": "@babel/helper-environment-visitor",
-  "version": "7.16.7",
+  "version": "7.18.9",
   "description": "Helper visitor to only visit nodes in the current 'this' context",
   "repository": {
     "type": "git",
@@ -24,5 +24,14 @@
   "engines": {
     "node": ">=6.9.0"
   },
-  "author": "The Babel Team (https://babel.dev/team)"
+  "author": "The Babel Team (https://babel.dev/team)",
+  "type": "commonjs",
+  "conditions": {
+    "USE_ESM": [
+      {
+        "type": "module"
+      },
+      null
+    ]
+  }
 }

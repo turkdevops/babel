@@ -2,6 +2,7 @@ import { declare } from "@babel/helper-plugin-utils";
 import {
   isModule,
   rewriteModuleStatementsAndPrepareHeader,
+  type RewriteModuleStatementsAndPrepareHeaderOptions,
   isSideEffectImport,
   buildNamespaceInitStatements,
   ensureStatementsHoisted,
@@ -11,14 +12,15 @@ import {
 import simplifyAccess from "@babel/helper-simple-access";
 import { template, types as t } from "@babel/core";
 import type { PluginOptions } from "@babel/helper-module-transforms";
+import type { Visitor, Scope } from "@babel/traverse";
 
 import { createDynamicImportTransform } from "babel-plugin-dynamic-import-node/utils";
 
 export interface Options extends PluginOptions {
   allowCommonJSExports?: boolean;
   allowTopLevelThis?: boolean;
-  importInterop?: "babel" | "node";
-  lazy?: boolean | string[] | ((string) => boolean);
+  importInterop?: RewriteModuleStatementsAndPrepareHeaderOptions["importInterop"];
+  lazy?: RewriteModuleStatementsAndPrepareHeaderOptions["lazy"];
   loose?: boolean;
   mjsStrictNamespace?: boolean;
   noInterop?: boolean;
@@ -73,7 +75,7 @@ export default declare((api, options: Options) => {
     throw new Error(`.mjsStrictNamespace must be a boolean, or undefined`);
   }
 
-  const getAssertion = localName => template.expression.ast`
+  const getAssertion = (localName: string) => template.expression.ast`
     (function(){
       throw new Error(
         "The CommonJS '" + "${localName}" + "' variable is not available in ES6 modules." +
@@ -82,7 +84,7 @@ export default declare((api, options: Options) => {
     })()
   `;
 
-  const moduleExportsVisitor = {
+  const moduleExportsVisitor: Visitor<{ scope: Scope }> = {
     ReferencedIdentifier(path) {
       const localName = path.node.name;
       if (localName !== "module" && localName !== "exports") return;
@@ -106,6 +108,7 @@ export default declare((api, options: Options) => {
 
     UpdateExpression(path) {
       const arg = path.get("argument");
+      if (!arg.isIdentifier()) return;
       const localName = arg.node.name;
       if (localName !== "module" && localName !== "exports") return;
 
@@ -127,7 +130,7 @@ export default declare((api, options: Options) => {
     AssignmentExpression(path) {
       const left = path.get("left");
       if (left.isIdentifier()) {
-        const localName = path.node.name;
+        const localName = left.node.name;
         if (localName !== "module" && localName !== "exports") return;
 
         const localBinding = path.scope.getBinding(localName);
@@ -234,7 +237,7 @@ export default declare((api, options: Options) => {
               t.stringLiteral(source),
             ]);
 
-            let header;
+            let header: t.Statement;
             if (isSideEffectImport(metadata)) {
               if (metadata.lazy) throw new Error("Assertion failure");
 
@@ -244,7 +247,7 @@ export default declare((api, options: Options) => {
                 wrapInterop(path, loadExpr, metadata.interop) || loadExpr;
 
               if (metadata.lazy) {
-                header = template.ast`
+                header = template.statement.ast`
                   function ${metadata.name}() {
                     const data = ${init};
                     ${metadata.name} = function(){ return data; };
@@ -252,7 +255,7 @@ export default declare((api, options: Options) => {
                   }
                 `;
               } else {
-                header = template.ast`
+                header = template.statement.ast`
                   var ${metadata.name} = ${init};
                 `;
               }

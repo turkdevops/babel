@@ -1,7 +1,7 @@
 import _checkDuplicateNodes from "../lib/index.js";
-import babel from "@babel/core";
-const { parseSync, traverse, types: t } = babel;
-const checkDuplicateNodes = _checkDuplicateNodes.default;
+import { parseSync, traverse, types as t } from "@babel/core";
+const checkDuplicateNodes =
+  _checkDuplicateNodes.default || _checkDuplicateNodes;
 
 describe("checkDuplicateNodes", () => {
   it("should throw on duplicate AST nodes within same parent", () => {
@@ -53,7 +53,7 @@ describe("checkDuplicateNodes", () => {
   });
   it("should throw when more than one arguments are passed", () => {
     expect(() => {
-      checkDuplicateNodes(babel, {});
+      checkDuplicateNodes({}, {});
     }).toThrow("checkDuplicateNodes accepts only one argument: ast");
   });
 });

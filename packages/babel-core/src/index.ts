@@ -8,9 +8,11 @@ export { resolvePlugin, resolvePreset } from "./config/files";
 
 export { getEnv } from "./config/helpers/environment";
 
+// NOTE: Lazy re-exports aren't detected by the Node.js CJS-ESM interop.
+// These are handled by pluginInjectNodeReexportsHints in our babel.config.js
+// so that they can work well.
 export * as types from "@babel/types";
 export { tokTypes } from "@babel/parser";
-
 export { default as traverse } from "@babel/traverse";
 export { default as template } from "@babel/template";
 
@@ -30,13 +32,20 @@ export {
 } from "./config";
 
 export type {
+  CallerMetadata,
+  InputOptions,
   PluginAPI,
   PluginObject,
   PresetAPI,
   PresetObject,
 } from "./config";
 
-export { transform, transformSync, transformAsync } from "./transform";
+export {
+  transform,
+  transformSync,
+  transformAsync,
+  type FileResult,
+} from "./transform";
 export {
   transformFile,
   transformFileSync,
@@ -63,10 +72,10 @@ export const DEFAULT_EXTENSIONS = Object.freeze([
 ] as const);
 
 // For easier backward-compatibility, provide an API like the one we exposed in Babel 6.
-import { loadOptions } from "./config";
+import { loadOptionsSync } from "./config";
 export class OptionManager {
   init(opts: {}) {
-    return loadOptions(opts);
+    return loadOptionsSync(opts);
   }
 }
 

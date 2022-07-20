@@ -81,8 +81,22 @@ gen_enforced_field(WorkspaceCwd, 'exports', '{ ".": "./lib/index.js", "./package
   % Exclude packages with more complex `exports`
   workspace_ident(WorkspaceCwd, WorkspaceIdent),
   WorkspaceIdent \= '@babel/compat-data',
-  WorkspaceIdent \= '@babel/plugin-transform-react-jsx', % TODO: Remove in Babel 8
   WorkspaceIdent \= '@babel/helper-plugin-test-runner', % TODO: Remove in Babel 8
+  WorkspaceIdent \= '@babel/parser',
+  WorkspaceIdent \= '@babel/plugin-transform-react-jsx', % TODO: Remove in Babel 8
   WorkspaceIdent \= '@babel/standalone',
   \+ atom_concat('@babel/eslint-', _, WorkspaceIdent),
   \+ atom_concat('@babel/runtime', _, WorkspaceIdent).
+
+% Enforces the type field to be set
+gen_enforced_field(WorkspaceCwd, 'type', 'commonjs') :-
+  \+ workspace_field(WorkspaceCwd, 'type', 'module').
+
+% Enforce a default 'conditions', unless it's already specified
+gen_enforced_field(WorkspaceCwd, 'conditions', '{ "USE_ESM": [{ "type": "module" }, null] }') :-
+  \+ workspace_field(WorkspaceCwd, 'private', true),
+  \+ workspace_field(WorkspaceCwd, 'conditions', _),
+  \+ workspace_field(WorkspaceCwd, 'main', './lib/index.cjs'),
+  % Exclude some packages
+  workspace_ident(WorkspaceCwd, WorkspaceIdent),
+  WorkspaceIdent \= '@babel/compat-data'.

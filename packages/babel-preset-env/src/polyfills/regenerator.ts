@@ -1,15 +1,20 @@
 import { getImportSource, getRequireSource } from "./utils";
 import type { Visitor } from "@babel/traverse";
+import type { PluginObject, PluginPass } from "@babel/core";
 
-function isRegeneratorSource(source) {
+function isRegeneratorSource(source: string) {
   return (
     source === "regenerator-runtime/runtime" ||
     source === "regenerator-runtime/runtime.js"
   );
 }
 
-export default function () {
-  const visitor: Visitor<{ regeneratorImportExcluded: boolean }> = {
+type State = {
+  regeneratorImportExcluded: boolean;
+};
+
+export default function (): PluginObject<State & PluginPass> {
+  const visitor: Visitor<State & PluginPass> = {
     ImportDeclaration(path) {
       if (isRegeneratorSource(getImportSource(path))) {
         this.regeneratorImportExcluded = true;

@@ -3,6 +3,7 @@ import * as inferers from "./inferers";
 import {
   anyTypeAnnotation,
   isAnyTypeAnnotation,
+  isArrayTypeAnnotation,
   isBooleanTypeAnnotation,
   isEmptyTypeAnnotation,
   isFlowBaseAnnotation,
@@ -11,6 +12,10 @@ import {
   isMixedTypeAnnotation,
   isNumberTypeAnnotation,
   isStringTypeAnnotation,
+  isTSArrayType,
+  isTSTypeAnnotation,
+  isTSTypeReference,
+  isTupleTypeAnnotation,
   isTypeAnnotation,
   isUnionTypeAnnotation,
   isVoidTypeAnnotation,
@@ -23,12 +28,17 @@ import type * as t from "@babel/types";
  * Infer the type of the current `NodePath`.
  */
 
-export function getTypeAnnotation(): t.FlowType {
-  if (this.typeAnnotation) return this.typeAnnotation;
-
-  let type = this._getTypeAnnotation() || anyTypeAnnotation();
-  if (isTypeAnnotation(type)) type = type.typeAnnotation;
-  return (this.typeAnnotation = type);
+export function getTypeAnnotation(this: NodePath): t.FlowType | t.TSType {
+  let type = this.getData("typeAnnotation");
+  if (type != null) {
+    return type;
+  }
+  type = this._getTypeAnnotation() || anyTypeAnnotation();
+  if (isTypeAnnotation(type) || isTSTypeAnnotation(type)) {
+    type = type.typeAnnotation;
+  }
+  this.setData("typeAnnotation", type);
+  return type;
 }
 
 // Used to avoid infinite recursion in cases like
@@ -40,7 +50,7 @@ const typeAnnotationInferringNodes = new WeakSet();
  * todo: split up this method
  */
 
-export function _getTypeAnnotation(): any {
+export function _getTypeAnnotation(this: NodePath): any {
   const node = this.node;
 
   if (!node) {
@@ -65,7 +75,9 @@ export function _getTypeAnnotation(): any {
     }
   }
 
+  // @ts-expect-error
   if (node.typeAnnotation) {
+    // @ts-expect-error
     return node.typeAnnotation;
   }
 
@@ -76,11 +88,14 @@ export function _getTypeAnnotation(): any {
   typeAnnotationInferringNodes.add(node);
 
   try {
-    let inferer = inferers[node.type];
+    let inferer =
+      // @ts-expect-error inferers do not cover all AST types
+      inferers[node.type];
     if (inferer) {
       return inferer.call(this, node);
     }
 
+    // @ts-expect-error inferers do not cover all AST types
     inferer = inferers[this.parentPath.type];
     if (inferer?.validParent) {
       return this.parentPath.getTypeAnnotation();
@@ -90,11 +105,19 @@ export function _getTypeAnnotation(): any {
   }
 }
 
-export function isBaseType(baseName: string, soft?: boolean): boolean {
+export function isBaseType(
+  this: NodePath,
+  baseName: string,
+  soft?: boolean,
+): boolean {
   return _isBaseType(baseName, this.getTypeAnnotation(), soft);
 }
 
-function _isBaseType(baseName: string, type?, soft?): boolean {
+function _isBaseType(
+  baseName: string,
+  type?: t.FlowType | t.TSType,
+  soft?: boolean,
+): boolean {
   if (baseName === "string") {
     return isStringTypeAnnotation(type);
   } else if (baseName === "number") {
@@ -118,7 +141,7 @@ function _isBaseType(baseName: string, type?, soft?): boolean {
   }
 }
 
-export function couldBeBaseType(name: string): boolean {
+export function couldBeBaseType(this: NodePath, name: string): boolean {
   const type = this.getTypeAnnotation();
   if (isAnyTypeAnnotation(type)) return true;
 
@@ -134,7 +157,10 @@ export function couldBeBaseType(name: string): boolean {
   }
 }
 
-export function baseTypeStrictlyMatches(rightArg: NodePath): boolean {
+export function baseTypeStrictlyMatches(
+  this: NodePath,
+  rightArg: NodePath,
+): boolean {
   const left = this.getTypeAnnotation();
   const right = rightArg.getTypeAnnotation();
 
@@ -144,10 +170,26 @@ export function baseTypeStrictlyMatches(rightArg: NodePath): boolean {
   return false;
 }
 
-export function isGenericType(genericName: string): boolean {
+export function isGenericType(this: NodePath, genericName: string): boolean {
   const type = this.getTypeAnnotation();
+  if (genericName === "Array") {
+    // T[]
+    if (
+      isTSArrayType(type) ||
+      isArrayTypeAnnotation(type) ||
+      isTupleTypeAnnotation(type)
+    ) {
+      return true;
+    }
+  }
   return (
-    isGenericTypeAnnotation(type) &&
-    isIdentifier(type.id, { name: genericName })
+    (isGenericTypeAnnotation(type) &&
+      isIdentifier(type.id, {
+        name: genericName,
+      })) ||
+    (isTSTypeReference(type) &&
+      isIdentifier(type.typeName, {
+        name: genericName,
+      }))
   );
 }
