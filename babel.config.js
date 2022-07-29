@@ -172,6 +172,8 @@ module.exports = function (api) {
       .filter(Boolean)
       .map(normalize),
     presets: [
+      // presets are applied from right to left
+      ["@babel/env", envOpts],
       [
         "@babel/preset-typescript",
         {
@@ -180,8 +182,6 @@ module.exports = function (api) {
           optimizeConstEnums: true,
         },
       ],
-      ["@babel/env", envOpts],
-      ["@babel/preset-flow", { allowDeclareFields: true }],
     ],
     plugins: [
       ["@babel/proposal-object-rest-spread", { useBuiltIns: true }],
@@ -742,7 +742,7 @@ function pluginAddImportExtension() {
 }
 
 const tokenTypesMapping = new Map();
-const tokenTypeSourcePath = "./packages/babel-parser/src/tokenizer/types.js";
+const tokenTypeSourcePath = "./packages/babel-parser/src/tokenizer/types.ts";
 
 function pluginBabelParserTokenType({
   types: { isIdentifier, numericLiteral },
@@ -777,7 +777,7 @@ function pluginBabelParserTokenType({
     }),
     {
       configFile: false,
-      parserOpts: { attachComments: false, plugins: ["flow"] },
+      parserOpts: { attachComments: false, plugins: ["typescript"] },
     }
   );
 

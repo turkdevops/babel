@@ -31,7 +31,6 @@
     "@babel/plugin-transform-modules-commonjs": "^7.18.0",
     "@babel/plugin-transform-runtime": "^7.18.0",
     "@babel/preset-env": "^7.18.0",
-    "@babel/preset-flow": "^7.17.12",
     "@babel/preset-typescript": "^7.17.12",
     "@babel/runtime": "^7.18.0",
     "@rollup/plugin-babel": "^5.3.1",
@@ -45,17 +44,16 @@
     "babel-plugin-transform-charcodes": "^0.2.0",
     "chalk": "^5.0.0",
     "charcodes": "^0.2.0",
-    "eslint": "^8.9.0",
+    "core-js": "^3.23.4",
+    "eslint": "^8.20.0",
     "eslint-formatter-codeframe": "^7.32.1",
     "eslint-import-resolver-node": "^0.3.6",
-    "eslint-plugin-flowtype": "^8.0.3",
-    "eslint-plugin-import": "^2.25.4",
-    "eslint-plugin-jest": "^26.1.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jest": "^26.6.0",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-prettier": "^4.2.1",
     "fancy-log": "^2.0.0",
-    "flow-bin": "^0.123.0",
-    "glob": "^7.1.7",
+    "glob": "^7.2.0",
     "gulp": "^4.0.2",
     "gulp-filter": "^7.0.0",
     "gulp-plumber": "^1.2.1",
@@ -64,14 +62,15 @@
     "jest": "^28.0.3",
     "jest-light-runner": "^0.2.1",
     "jest-worker": "^27.4.0",
-    "lint-staged": "^9.2.0",
+    "lint-staged": "^13.0.3",
     "mergeiterator": "^1.4.4",
-    "prettier": "2.7.1",
+    "prettier": "^2.7.1",
     "rollup": "^2.70.2",
     "rollup-plugin-dts": "^4.2.1",
     "rollup-plugin-polyfill-node": "^0.9.0",
     "rollup-plugin-terser": "^7.0.2",
     "semver": "^6.3.0",
+    "shelljs": "^0.8.5",
     "test262-stream": "^1.4.0",
     "through2": "^4.0.0",
     "typescript": "~4.7.4"
@@ -99,7 +98,7 @@
     "yarn": ">=1.4.0"
   },
   "lint-staged": {
-    "*.{js,ts}": [
+    "*.{js,cjs,mjs,ts}": [
       "eslint --format=codeframe"
     ]
   },

@@ -142,7 +142,7 @@ async function generateTypeHelpers(helperKind, filename = "index.ts") {
 
 /**
  *
- * @typedef {("asserts" | "validators" | "virtual-types")} TraverseHelperKind
+ * @typedef {("asserts" | "validators")} TraverseHelperKind
  * @param {TraverseHelperKind} helperKind
  */
 function generateTraverseHelpers(helperKind) {
@@ -312,27 +312,29 @@ function buildRollup(packages, targetBrowsers) {
           input,
           external,
           onwarn(warning, warn) {
-            if (warning.code === "CIRCULAR_DEPENDENCY") return;
-            if (warning.code === "UNUSED_EXTERNAL_IMPORT") {
-              warn(warning);
-              return;
-            }
-
-            // Rollup warns about using babel.default at
-            // https://github.com/babel/babel-polyfills/blob/4ac92be5b70b13e3d8a34614d8ecd900eb3f40e4/packages/babel-helper-define-polyfill-provider/src/types.js#L5
-            // We can safely ignore this warning, and let Rollup replace it with undefined.
-            if (
-              warning.code === "MISSING_EXPORT" &&
-              warning.exporter === "packages/babel-core/src/index.ts" &&
-              warning.missing === "default" &&
-              [
-                "@babel/helper-define-polyfill-provider",
-                "babel-plugin-polyfill-corejs2",
-                "babel-plugin-polyfill-corejs3",
-                "babel-plugin-polyfill-regenerator",
-              ].some(pkg => warning.importer.includes(pkg))
-            ) {
-              return;
+            switch (warning.code) {
+              case "CIRCULAR_DEPENDENCY":
+              case "SOURCEMAP_ERROR": // Rollup warns about the babel-polyfills source maps
+                return;
+              case "UNUSED_EXTERNAL_IMPORT":
+                warn(warning);
+                return;
+              case "MISSING_EXPORT":
+                // Rollup warns about using babel.default at
+                // https://github.com/babel/babel-polyfills/blob/4ac92be5b70b13e3d8a34614d8ecd900eb3f40e4/packages/babel-helper-define-polyfill-provider/src/types.js#L5
+                // We can safely ignore this warning, and let Rollup replace it with undefined.
+                if (
+                  warning.exporter === "packages/babel-core/src/index.ts" &&
+                  warning.missing === "default" &&
+                  [
+                    "@babel/helper-define-polyfill-provider",
+                    "babel-plugin-polyfill-corejs2",
+                    "babel-plugin-polyfill-corejs3",
+                    "babel-plugin-polyfill-regenerator",
+                  ].some(pkg => warning.importer.includes(pkg))
+                ) {
+                  return;
+                }
             }
 
             // We use console.warn here since it prints more info than just "warn",
@@ -493,7 +495,7 @@ const libBundles = [
 }));
 
 const cjsBundles = [
-  // This is used by Prettier, @babel/register and @babel/eslint-parser
+  // This is used by @babel/register and @babel/eslint-parser
   { src: "packages/babel-parser" },
 ];
 
@@ -523,7 +525,6 @@ gulp.task("generate-type-helpers", () => {
     generateTypeHelpers("ast-types"),
     generateTraverseHelpers("asserts"),
     generateTraverseHelpers("validators"),
-    generateTraverseHelpers("virtual-types"),
   ]);
 });
 
@@ -590,7 +591,7 @@ ${fs.readFileSync(path.join(path.dirname(input), "license"), "utf8")}*/
 
   fs.writeFileSync(
     output.replace(".js", ".d.ts"),
-    `export function resolve(specifier: stirng, parent: string): Promise<string>;`
+    `export function resolve(specifier: string, parent: string): Promise<string>;`
   );
 });
 
@@ -671,24 +672,23 @@ gulp.task(
   )
 );
 
+function watch() {
+  gulp.watch(defaultSourcesGlob, gulp.task("build-no-bundle-watch"));
+  gulp.watch(babelStandalonePluginConfigGlob, gulp.task("generate-standalone"));
+  gulp.watch(buildTypingsWatchGlob, gulp.task("generate-type-helpers"));
+  gulp.watch(
+    "./packages/babel-helpers/src/helpers/*.js",
+    gulp.task("generate-runtime-helpers")
+  );
+  if (USE_ESM) {
+    gulp.watch(
+      cjsBundles.map(({ src }) => `./${src}/lib/**.js`),
+      gulp.task("build-cjs-bundles")
+    );
+  }
+}
+
 gulp.task(
   "watch",
-  gulp.series("build-dev", function watch() {
-    gulp.watch(defaultSourcesGlob, gulp.task("build-no-bundle-watch"));
-    gulp.watch(
-      babelStandalonePluginConfigGlob,
-      gulp.task("generate-standalone")
-    );
-    gulp.watch(buildTypingsWatchGlob, gulp.task("generate-type-helpers"));
-    gulp.watch(
-      "./packages/babel-helpers/src/helpers/*.js",
-      gulp.task("generate-runtime-helpers")
-    );
-    if (USE_ESM) {
-      gulp.watch(
-        cjsBundles.map(({ src }) => `./${src}/lib/**.js`),
-        gulp.task("build-cjs-bundles")
-      );
-    }
-  })
+  process.env.WATCH_SKIP_BUILD ? watch : gulp.series("build-dev", watch)
 );
