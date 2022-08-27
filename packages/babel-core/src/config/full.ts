@@ -30,6 +30,7 @@ import loadPrivatePartialConfig from "./partial";
 import type { ValidatedOptions } from "./validation/options";
 
 import * as Context from "./cache-contexts";
+import ConfigError from "../errors/config-error";
 
 type LoadedDescriptor = {
   value: {};
@@ -219,7 +220,9 @@ function enhanceError<T extends Function>(context: ConfigContext, fn: T): T {
       // There are a few case where thrown errors will try to annotate themselves multiple times, so
       // to keep things simple we just bail out if re-wrapping the message.
       if (!/^\[BABEL\]/.test(e.message)) {
-        e.message = `[BABEL] ${context.filename || "unknown"}: ${e.message}`;
+        e.message = `[BABEL] ${context.filename ?? "unknown file"}: ${
+          e.message
+        }`;
       }
 
       throw e;
@@ -411,7 +414,7 @@ const validateIfOptionNeedsFilename = (
     const formattedPresetName = descriptor.name
       ? `"${descriptor.name}"`
       : "/* your preset */";
-    throw new Error(
+    throw new ConfigError(
       [
         `Preset ${formattedPresetName} requires a filename to be set when babel is called directly,`,
         `\`\`\``,
