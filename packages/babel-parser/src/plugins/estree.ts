@@ -1,7 +1,7 @@
 import { type TokenType } from "../tokenizer/types";
 import type Parser from "../parser";
 import type { ExpressionErrors } from "../parser/util";
-import * as N from "../types";
+import type * as N from "../types";
 import type { Node as NodeType, NodeBase, File } from "../types";
 import type { Position } from "../util/location";
 import { Errors } from "../parse-error";
@@ -95,35 +95,25 @@ export default (superClass: typeof Parser) =>
       return this.estreeParseLiteral(value);
     }
 
+    // Cast a Directive to an ExpressionStatement. Mutates the input Directive.
     directiveToStmt(directive: N.Directive): N.ExpressionStatement {
-      const directiveLiteral = directive.value;
+      const expression = directive.value as any as N.EstreeLiteral;
+      delete directive.value;
 
-      const stmt = this.startNodeAt<N.ExpressionStatement>(
-        directive.start,
-        directive.loc.start,
-      );
-      const expression = this.startNodeAt<N.EstreeLiteral>(
-        directiveLiteral.start,
-        directiveLiteral.loc.start,
-      );
+      expression.type = "Literal";
+      // @ts-expect-error N.EstreeLiteral.raw is not defined.
+      expression.raw = expression.extra.raw;
+      expression.value = expression.extra.expressionValue;
 
-      expression.value = directiveLiteral.extra.expressionValue;
-      // @ts-expect-error TS2339: Property 'raw' does not exist on type 'Undone '.
-      expression.raw = directiveLiteral.extra.raw;
+      const stmt = directive as any as N.ExpressionStatement;
+      stmt.type = "ExpressionStatement";
+      stmt.expression = expression;
+      // @ts-expect-error N.ExpressionStatement.directive is not defined
+      stmt.directive = expression.extra.rawValue;
 
-      stmt.expression = this.finishNodeAt(
-        expression,
-        "Literal",
-        directiveLiteral.loc.end,
-      );
-      // @ts-expect-error N.Directive.value is not defined
-      stmt.directive = directiveLiteral.extra.raw.slice(1, -1);
+      delete expression.extra;
 
-      return this.finishNodeAt(
-        stmt,
-        "ExpressionStatement",
-        directive.loc.end,
-      ) as N.ExpressionStatement;
+      return stmt;
     }
 
     // ==================================
@@ -202,7 +192,7 @@ export default (superClass: typeof Parser) =>
         true,
       );
       if (method.typeParameters) {
-        // @ts-expect-error
+        // @ts-expect-error mutate AST types
         method.value.typeParameters = method.typeParameters;
         delete method.typeParameters;
       }
@@ -296,7 +286,7 @@ export default (superClass: typeof Parser) =>
       // @ts-expect-error mutate AST types
       funcNode.type = "FunctionExpression";
       delete funcNode.kind;
-      // @ts-expect-error
+      // @ts-expect-error mutate AST types
       node.value = funcNode;
       if (type === "ClassPrivateMethod") {
         node.computed = false;

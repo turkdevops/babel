@@ -1,4 +1,6 @@
 const semver = require("semver");
+const shell = require("shelljs");
+
 const nodeVersion = process.versions.node;
 const supportsESMAndJestLightRunner = semver.satisfies(
   nodeVersion,
@@ -8,9 +10,15 @@ const supportsESMAndJestLightRunner = semver.satisfies(
 );
 const isPublishBundle = process.env.IS_PUBLISH;
 
+if (!supportsESMAndJestLightRunner) {
+  //Avoid source maps from breaking stack tests.
+  shell.rm("-rf", "packages/babel-core/lib/**/*.js.map");
+}
+
 module.exports = {
   runner: supportsESMAndJestLightRunner ? "jest-light-runner" : "jest-runner",
 
+  snapshotFormat: { escapeString: true, printBasicPrototype: true },
   collectCoverageFrom: [
     "packages/*/src/**/*.{js,cjs,mjs,ts}",
     "codemods/*/src/**/*.{js,cjs,mjs,ts}",
@@ -28,10 +36,10 @@ module.exports = {
     "<rootDir>/packages/babel-core/src/vendor/.*",
   ],
 
-  // The eslint/* packages use ESLint v6, which has dropped support for Node v6.
+  // The eslint/* packages is tested against ESLint v8, which has dropped support for Node v10.
   // TODO: Remove this process.version check in Babel 8.
   testRegex: `./(packages|codemods${
-    semver.satisfies(nodeVersion, "<10") ? "" : "|eslint"
+    semver.satisfies(nodeVersion, "<12") ? "" : "|eslint"
   })/[^/]+/test/.+\\.m?js$`,
   testPathIgnorePatterns: [
     "/node_modules/",

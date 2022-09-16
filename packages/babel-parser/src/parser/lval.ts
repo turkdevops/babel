@@ -31,7 +31,7 @@ import {
   BIND_NONE,
   BIND_SCOPE_LEXICAL,
 } from "../util/scopeflags";
-import { ExpressionErrors } from "./util";
+import type { ExpressionErrors } from "./util";
 import { Errors, type LValAncestor } from "../parse-error";
 import type Parser from "./index";
 
@@ -664,9 +664,7 @@ export default abstract class LValParser extends NodeUtils {
         ? expression
         : ancestor;
 
-    // Flow has difficulty tracking `key` and `expression`, but only if we use
-    // null-proto objects. If we use normal objects, everything works fine.
-    // @ts-expect-error
+    // @ts-expect-error key may not index expression.
     for (const child of [].concat(expression[key])) {
       if (child) {
         this.checkLVal(child, {

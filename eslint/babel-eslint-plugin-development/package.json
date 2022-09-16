@@ -1,6 +1,6 @@
 {
   "name": "@babel/eslint-plugin-development",
-  "version": "7.17.7",
+  "version": "7.19.1",
   "description": "ESLint rules that enforce best practices in the development of Babel plugins.",
   "keywords": [
     "eslint",
@@ -31,6 +31,6 @@
   },
   "homepage": "https://babel.dev/",
   "devDependencies": {
-    "eslint": "^7.27.0"
+    "eslint": "^8.22.0"
   }
 }

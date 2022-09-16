@@ -2,7 +2,7 @@ import * as charCodes from "charcodes";
 
 import { tokenLabelName, tt } from "../tokenizer/types";
 import type Parser from "../parser";
-import * as N from "../types";
+import type * as N from "../types";
 import { ParseErrorEnum } from "../parse-error";
 import type { Undone } from "../parser/node";
 import type { ExpressionErrors } from "../parser/util";
@@ -197,7 +197,7 @@ export default (superClass: typeof Parser) =>
       }
 
       if (this.match(tt.colon)) {
-        // @ts-expect-error
+        // @ts-expect-error placeholder typings
         const stmt: N.LabeledStatement = node;
         stmt.label = this.finishPlaceholder(expr, "Identifier");
         this.next();

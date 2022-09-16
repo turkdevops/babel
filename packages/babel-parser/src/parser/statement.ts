@@ -1,4 +1,4 @@
-import * as N from "../types";
+import type * as N from "../types";
 import {
   tokenIsIdentifier,
   tokenIsLoop,
@@ -38,7 +38,8 @@ import {
 } from "../util/expression-scope";
 import type { SourceType } from "../options";
 import { Token } from "../tokenizer";
-import { Position, createPositionWithColumnOffset } from "../util/location";
+import type { Position } from "../util/location";
+import { createPositionWithColumnOffset } from "../util/location";
 import { cloneStringLiteral, cloneIdentifier, type Undone } from "./node";
 import type Parser from "./index";
 
@@ -580,19 +581,40 @@ export default abstract class StatementParser extends ExpressionParser {
         expr = this.parseExpression();
         this.expect(tt.parenR);
         expr = this.wrapParenthesis(startPos, startLoc, expr);
+
+        const paramsStartLoc = this.state.startLoc;
+        node.expression = this.parseMaybeDecoratorArguments(expr);
+        if (
+          this.getPluginOption("decorators", "allowCallParenthesized") ===
+            false &&
+          node.expression !== expr
+        ) {
+          this.raise(Errors.DecoratorArgumentsOutsideParentheses, {
+            at: paramsStartLoc,
+          });
+        }
       } else {
         expr = this.parseIdentifier(false);
 
         while (this.eat(tt.dot)) {
           const node = this.startNodeAt(startPos, startLoc);
           node.object = expr;
-          node.property = this.parseIdentifier(true);
+          if (this.match(tt.privateName)) {
+            this.classScope.usePrivateName(
+              this.state.value,
+              this.state.startLoc,
+            );
+            node.property = this.parsePrivateName();
+          } else {
+            node.property = this.parseIdentifier(true);
+          }
           node.computed = false;
           expr = this.finishNode(node, "MemberExpression");
         }
+
+        node.expression = this.parseMaybeDecoratorArguments(expr);
       }
 
-      node.expression = this.parseMaybeDecoratorArguments(expr);
       this.state.decoratorStack.pop();
     } else {
       node.expression = this.parseExprSubscripts();
@@ -2590,10 +2612,9 @@ export default abstract class StatementParser extends ExpressionParser {
   ) {
     // @ts-expect-error Fixme: node.type must be undefined because they are undone
     if (this.isJSONModuleImport(node) && node.type !== "ExportAllDeclaration") {
-      // @ts-expect-error
+      // @ts-expect-error specifiers may not index node
       const { specifiers } = node;
-      // @ts-expect-error
-      if (node.specifiers != null) {
+      if (specifiers != null) {
         // @ts-expect-error refine specifier types
         const nonDefaultNamedSpecifier = specifiers.find(specifier => {
           let imported;
@@ -2691,11 +2712,11 @@ export default abstract class StatementParser extends ExpressionParser {
       | N.ImportSpecifier
       | N.ImportDefaultSpecifier
       | N.ImportNamespaceSpecifier,
-  >(specifier: Undone<T>, type: T["type"]) {
+  >(specifier: Undone<T>, type: T["type"], bindingType = BIND_LEXICAL) {
     this.checkLVal(specifier.local, {
       // @ts-expect-error refine types
       in: specifier,
-      binding: BIND_LEXICAL,
+      binding: bindingType,
     });
     return this.finishNode(specifier, type);
   }
@@ -2869,6 +2890,7 @@ export default abstract class StatementParser extends ExpressionParser {
         importedIsString,
         node.importKind === "type" || node.importKind === "typeof",
         isMaybeTypeOnly,
+        undefined,
       );
       node.specifiers.push(importSpecifier);
     }
@@ -2881,6 +2903,7 @@ export default abstract class StatementParser extends ExpressionParser {
     /* eslint-disable @typescript-eslint/no-unused-vars -- used in TypeScript and Flow parser */
     isInTypeOnlyImport: boolean,
     isMaybeTypeOnly: boolean,
+    bindingType: BindingTypes | undefined,
     /* eslint-enable @typescript-eslint/no-unused-vars */
   ): N.ImportSpecifier {
     if (this.eatContextual(tt._as)) {
@@ -2903,7 +2926,11 @@ export default abstract class StatementParser extends ExpressionParser {
         specifier.local = cloneIdentifier(imported);
       }
     }
-    return this.finishImportSpecifier(specifier, "ImportSpecifier");
+    return this.finishImportSpecifier(
+      specifier,
+      "ImportSpecifier",
+      bindingType,
+    );
   }
 
   // This is used in flow and typescript plugin

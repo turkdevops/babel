@@ -7,7 +7,7 @@ import {
   createPositionWithColumnOffset,
 } from "../util/location";
 import CommentsParser, { type CommentWhitespace } from "../parser/comments";
-import * as N from "../types";
+import type * as N from "../types";
 import * as charCodes from "charcodes";
 import { isIdentifierStart, isIdentifierChar } from "../util/identifier";
 import {
@@ -183,8 +183,7 @@ export default abstract class Tokenizer extends CommentsParser {
    */
   lookahead(): LookaheadState {
     const old = this.state;
-    // For performance we use a simplified tokenizer state structure
-    // @ts-expect-error
+    // @ts-expect-error For performance we use a simplified tokenizer state structure
     this.state = this.createLookaheadState(old);
 
     this.isLookahead = true;
@@ -455,9 +454,8 @@ export default abstract class Tokenizer extends CommentsParser {
 
   replaceToken(type: TokenType): void {
     this.state.type = type;
-    // the prevType of updateContext is required
+    // @ts-expect-error the prevType of updateContext is required
     // only when the new type is tt.slash/tt.jsxTagEnd
-    // @ts-expect-error
     this.updateContext();
   }
 
@@ -493,7 +491,7 @@ export default abstract class Tokenizer extends CommentsParser {
       // which is not allowed in the spec. Throwing expecting recordAndTuple is
       // misleading
       this.expectPlugin("recordAndTuple");
-      if (this.getPluginOption("recordAndTuple", "syntaxType") !== "hash") {
+      if (this.getPluginOption("recordAndTuple", "syntaxType") === "bar") {
         throw this.raise(
           next === charCodes.leftCurlyBrace
             ? Errors.RecordExpressionHashIncorrectStartSyntaxType

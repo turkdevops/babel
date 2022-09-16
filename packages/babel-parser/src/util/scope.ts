@@ -15,10 +15,10 @@ import {
   type ScopeFlags,
   type BindingTypes,
 } from "./scopeflags";
-import { Position } from "./location";
-import * as N from "../types";
+import type { Position } from "./location";
+import type * as N from "../types";
 import { Errors } from "../parse-error";
-import Tokenizer from "../tokenizer";
+import type Tokenizer from "../tokenizer";
 
 // Start an AST node, attaching a start offset.
 export class Scope {
@@ -93,8 +93,9 @@ export default class ScopeHandler<IScope extends Scope = Scope> {
     this.scopeStack.push(this.createScope(flags));
   }
 
-  exit() {
-    this.scopeStack.pop();
+  exit(): ScopeFlags {
+    const scope = this.scopeStack.pop();
+    return scope.flags;
   }
 
   // The spec says:

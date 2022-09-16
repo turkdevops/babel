@@ -1,6 +1,6 @@
 {
   "name": "@babel/helper-compilation-targets",
-  "version": "7.18.9",
+  "version": "7.19.1",
   "author": "The Babel Team (https://babel.dev/team)",
   "license": "MIT",
   "description": "Helper functions on Babel compilation targets",
@@ -24,7 +24,7 @@
   "dependencies": {
     "@babel/compat-data": "workspace:^",
     "@babel/helper-validator-option": "workspace:^",
-    "browserslist": "^4.20.2",
+    "browserslist": "^4.21.3",
     "semver": "condition:BABEL_8_BREAKING ? ^7.3.4 : ^6.3.0"
   },
   "peerDependencies": {

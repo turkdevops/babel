@@ -13,8 +13,9 @@ import {
   tokenCanStartExpression,
 } from "../../tokenizer/types";
 import { types as tc } from "../../tokenizer/context";
-import * as N from "../../types";
-import { Position, createPositionWithColumnOffset } from "../../util/location";
+import type * as N from "../../types";
+import type { Position } from "../../util/location";
+import { createPositionWithColumnOffset } from "../../util/location";
 import type Parser from "../../parser";
 import {
   type BindingTypes,
@@ -26,9 +27,11 @@ import {
   BIND_TS_INTERFACE,
   BIND_TS_AMBIENT,
   BIND_TS_NAMESPACE,
+  BIND_TS_TYPE_IMPORT,
   BIND_CLASS,
   BIND_LEXICAL,
   BIND_NONE,
+  BIND_FLAGS_TS_IMPORT,
 } from "../../util/scopeflags";
 import TypeScriptScopeHandler from "./scope";
 import * as charCodes from "charcodes";
@@ -1117,9 +1120,8 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
           labeledNode.label = type.typeName as N.Identifier;
         } else {
           this.raise(TSErrors.InvalidTupleMemberLabel, { at: type });
-          // This produces an invalid AST, but at least we don't drop
+          // @ts-expect-error This produces an invalid AST, but at least we don't drop
           // nodes representing the invalid source.
-          // @ts-expect-error
           labeledNode.label = type;
         }
 
@@ -1156,8 +1158,7 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
         N.TsFunctionOrConstructorType | N.TsConstructorType
       >();
       if (type === "TSConstructorType") {
-        // @ts-expect-error
-        node.abstract = !!abstract;
+        (node as Undone<N.TsConstructorType>).abstract = !!abstract;
         if (abstract) this.next();
         this.next(); // eat `new`
       }
@@ -2345,10 +2346,7 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
       }
       if (bodilessType === "TSDeclareFunction" && this.state.isAmbientContext) {
         this.raise(TSErrors.DeclareFunctionHasImplementation, { at: node });
-        if (
-          // @ts-expect-error
-          node.declare
-        ) {
+        if ((node as Undone<N.FunctionDeclaration>).declare) {
           return super.parseFunctionBodyAndFinish(node, bodilessType, isMethod);
         }
       }
@@ -2483,7 +2481,9 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
           }
 
           if (!noCalls && this.eat(tt.parenL)) {
-            const node = this.startNodeAt<N.CallExpression>(startPos, startLoc);
+            const node = this.startNodeAt<
+              N.CallExpression | N.OptionalCallExpression
+            >(startPos, startLoc);
             node.callee = base;
             // possibleAsync always false here, because we would have handled it above.
             // @ts-expect-error (won't be any undefined arguments)
@@ -2497,8 +2497,8 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
 
             node.typeParameters = typeArguments;
             if (state.optionalChainMember) {
-              // @ts-expect-error
-              node.optional = isOptionalCall;
+              (node as Undone<N.OptionalCallExpression>).optional =
+                isOptionalCall;
             }
 
             return this.finishCallExpression(node, state.optionalChainMember);
@@ -2508,6 +2508,8 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
           if (
             // a<b>>c is not (a<b>)>c, but a<(b>>c)
             tokenType === tt.gt ||
+            // a<b>>>c is not (a<b>)>>c, but a<(b>>>c)
+            tokenType === tt.bitShiftR ||
             // a<b>c is (a<b)>c
             (tokenType !== tt.parenL &&
               tokenCanStartExpression(tokenType) &&
@@ -3159,12 +3161,12 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
     parseClassPrivateProperty(
       node: N.ClassPrivateProperty,
     ): N.ClassPrivateProperty {
-      // @ts-expect-error
+      // @ts-expect-error abstract may not index node
       if (node.abstract) {
         this.raise(TSErrors.PrivateElementHasAbstract, { at: node });
       }
 
-      // @ts-expect-error
+      // @ts-expect-error accessibility may not index node
       if (node.accessibility) {
         this.raise(TSErrors.PrivateElementHasAccessibility, {
           at: node,
@@ -3192,7 +3194,7 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
         });
       }
 
-      // @ts-expect-error
+      // @ts-expect-error declare does not exist in ClassMethod
       const { declare = false, kind } = method;
 
       if (declare && (kind === "get" || kind === "set")) {
@@ -3922,7 +3924,7 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
     }
 
     parseExportSpecifier(
-      node: any,
+      node: Undone<N.ExportSpecifier>,
       isString: boolean,
       isInTypeExport: boolean,
       isMaybeTypeOnly: boolean,
@@ -3945,10 +3947,12 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
     }
 
     parseImportSpecifier(
-      specifier: any,
+      specifier: Undone<N.ImportSpecifier>,
       importedIsString: boolean,
       isInTypeOnlyImport: boolean,
       isMaybeTypeOnly: boolean,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      bindingType: BindingTypes | undefined,
     ): N.ImportSpecifier {
       if (!importedIsString && isMaybeTypeOnly) {
         this.parseTypeOnlyImportExportSpecifier(
@@ -3964,6 +3968,7 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
         importedIsString,
         isInTypeOnlyImport,
         isMaybeTypeOnly,
+        isInTypeOnlyImport ? BIND_TS_TYPE_IMPORT : BIND_FLAGS_TS_IMPORT,
       );
     }
 
@@ -4059,7 +4064,10 @@ export default (superClass: ClassWithMixin<typeof Parser, IJSXParserMixin>) =>
         node[rightOfAsKey] = cloneIdentifier(node[leftOfAsKey]);
       }
       if (isImport) {
-        this.checkIdentifier(node[rightOfAsKey], BIND_LEXICAL);
+        this.checkIdentifier(
+          node[rightOfAsKey],
+          hasTypeSpecifier ? BIND_TS_TYPE_IMPORT : BIND_FLAGS_TS_IMPORT,
+        );
       }
     }
   };

@@ -87,15 +87,23 @@ export function validatePlugins(plugins: PluginList) {
       "decorators",
       "decoratorsBeforeExport",
     );
-    if (decoratorsBeforeExport == null) {
-      throw new Error(
-        "The 'decorators' plugin requires a 'decoratorsBeforeExport' option," +
-          " whose value must be a boolean. If you are migrating from" +
-          " Babylon/Babel 6 or want to use the old decorators proposal, you" +
-          " should use the 'decorators-legacy' plugin instead of 'decorators'.",
-      );
-    } else if (typeof decoratorsBeforeExport !== "boolean") {
+    if (
+      decoratorsBeforeExport != null &&
+      typeof decoratorsBeforeExport !== "boolean"
+    ) {
       throw new Error("'decoratorsBeforeExport' must be a boolean.");
+    }
+
+    const allowCallParenthesized = getPluginOption(
+      plugins,
+      "decorators",
+      "allowCallParenthesized",
+    );
+    if (
+      allowCallParenthesized != null &&
+      typeof allowCallParenthesized !== "boolean"
+    ) {
+      throw new Error("'allowCallParenthesized' must be a boolean.");
     }
   }
 
@@ -189,12 +197,13 @@ export function validatePlugins(plugins: PluginList) {
 
   if (
     hasPlugin(plugins, "recordAndTuple") &&
+    getPluginOption(plugins, "recordAndTuple", "syntaxType") != null &&
     !RECORD_AND_TUPLE_SYNTAX_TYPES.includes(
       getPluginOption(plugins, "recordAndTuple", "syntaxType"),
     )
   ) {
     throw new Error(
-      "'recordAndTuple' requires 'syntaxType' option whose value should be one of: " +
+      "The 'syntaxType' option of the 'recordAndTuple' plugin must be one of: " +
         RECORD_AND_TUPLE_SYNTAX_TYPES.map(p => `'${p}'`).join(", "),
     );
   }
@@ -206,8 +215,8 @@ export function validatePlugins(plugins: PluginList) {
     const error = new Error(
       "'asyncDoExpressions' requires 'doExpressions', please add 'doExpressions' to parser plugins.",
     );
-    // @ts-expect-error
-    error.missingPlugins = "doExpressions"; // so @babel/core can provide better error message
+    // @ts-expect-error so @babel/core can provide better error message
+    error.missingPlugins = "doExpressions";
     throw error;
   }
 }

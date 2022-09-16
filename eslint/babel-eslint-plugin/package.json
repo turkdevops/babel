@@ -1,6 +1,6 @@
 {
   "name": "@babel/eslint-plugin",
-  "version": "7.18.10",
+  "version": "7.19.1",
   "description": "Companion rules for @babel/eslint-parser",
   "main": "./lib/index.cjs",
   "type": "commonjs",
@@ -41,6 +41,6 @@
   },
   "devDependencies": {
     "clone-deep": "^4.0.1",
-    "eslint": "^7.27.0"
+    "eslint": "^8.22.0"
   }
 }

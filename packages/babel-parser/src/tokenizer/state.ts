@@ -1,11 +1,12 @@
 import type { Options } from "../options";
-import * as N from "../types";
+import type * as N from "../types";
 import type { CommentWhitespace } from "../parser/comments";
 import { Position } from "../util/location";
 
 import { types as ct, type TokContext } from "./context";
 import { tt, type TokenType } from "./types";
-import { Errors, type ParseError } from "../parse-error";
+import type { Errors } from "../parse-error";
+import { type ParseError } from "../parse-error";
 
 export type DeferredStrictError =
   | typeof Errors.StrictNumericEscape
@@ -162,7 +163,7 @@ export default class State {
         val = val.slice();
       }
 
-      // @ts-expect-error
+      // @ts-expect-error val must conform to S[key]
       state[key] = val;
     }
 

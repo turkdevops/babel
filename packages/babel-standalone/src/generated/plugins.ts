@@ -30,6 +30,7 @@ import proposalClassStaticBlock from "@babel/plugin-proposal-class-static-block"
 import proposalDecorators from "@babel/plugin-proposal-decorators";
 import proposalDestructuringPrivate from "@babel/plugin-proposal-destructuring-private";
 import proposalDoExpressions from "@babel/plugin-proposal-do-expressions";
+import proposalDuplicateNamedCapturingGroupsRegex from "@babel/plugin-proposal-duplicate-named-capturing-groups-regex";
 import proposalDynamicImport from "@babel/plugin-proposal-dynamic-import";
 import proposalExportDefaultFrom from "@babel/plugin-proposal-export-default-from";
 import proposalExportNamespaceFrom from "@babel/plugin-proposal-export-namespace-from";
@@ -45,6 +46,7 @@ import proposalOptionalChaining from "@babel/plugin-proposal-optional-chaining";
 import proposalPipelineOperator from "@babel/plugin-proposal-pipeline-operator";
 import proposalPrivateMethods from "@babel/plugin-proposal-private-methods";
 import proposalPrivatePropertyInObject from "@babel/plugin-proposal-private-property-in-object";
+import proposalRecordAndTuple from "@babel/plugin-proposal-record-and-tuple";
 import proposalThrowExpressions from "@babel/plugin-proposal-throw-expressions";
 import proposalUnicodePropertyRegex from "@babel/plugin-proposal-unicode-property-regex";
 import proposalUnicodeSetsRegex from "@babel/plugin-proposal-unicode-sets-regex";
@@ -128,6 +130,7 @@ export {
   proposalDecorators,
   proposalDestructuringPrivate,
   proposalDoExpressions,
+  proposalDuplicateNamedCapturingGroupsRegex,
   proposalDynamicImport,
   proposalExportDefaultFrom,
   proposalExportNamespaceFrom,
@@ -143,6 +146,7 @@ export {
   proposalPipelineOperator,
   proposalPrivateMethods,
   proposalPrivatePropertyInObject,
+  proposalRecordAndTuple,
   proposalThrowExpressions,
   proposalUnicodePropertyRegex,
   proposalUnicodeSetsRegex,
@@ -227,6 +231,8 @@ export const all: { [k: string]: any } = {
   "proposal-decorators": proposalDecorators,
   "proposal-destructuring-private": proposalDestructuringPrivate,
   "proposal-do-expressions": proposalDoExpressions,
+  "proposal-duplicate-named-capturing-groups-regex":
+    proposalDuplicateNamedCapturingGroupsRegex,
   "proposal-dynamic-import": proposalDynamicImport,
   "proposal-export-default-from": proposalExportDefaultFrom,
   "proposal-export-namespace-from": proposalExportNamespaceFrom,
@@ -242,6 +248,7 @@ export const all: { [k: string]: any } = {
   "proposal-pipeline-operator": proposalPipelineOperator,
   "proposal-private-methods": proposalPrivateMethods,
   "proposal-private-property-in-object": proposalPrivatePropertyInObject,
+  "proposal-record-and-tuple": proposalRecordAndTuple,
   "proposal-throw-expressions": proposalThrowExpressions,
   "proposal-unicode-property-regex": proposalUnicodePropertyRegex,
   "proposal-unicode-sets-regex": proposalUnicodeSetsRegex,

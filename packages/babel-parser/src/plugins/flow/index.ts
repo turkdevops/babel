@@ -11,8 +11,8 @@ import {
   type TokenType,
   tokenIsFlowInterfaceOrTypeOrOpaque,
 } from "../../tokenizer/types";
-import * as N from "../../types";
-import { Position } from "../../util/location";
+import type * as N from "../../types";
+import type { Position } from "../../util/location";
 import { types as tc } from "../../tokenizer/context";
 import * as charCodes from "charcodes";
 import { isIteratorStart } from "../../util/identifier";
@@ -2785,6 +2785,8 @@ export default (superClass: typeof Parser) =>
       isInTypeOnlyImport: boolean,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       isMaybeTypeOnly: boolean,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      bindingType: BindingTypes | undefined,
     ): N.ImportSpecifier {
       const firstIdent = specifier.imported;
 
@@ -2886,7 +2888,7 @@ export default (superClass: typeof Parser) =>
       node: Undone<N.Function>,
       allowModifiers?: boolean,
     ): void {
-      // @ts-expect-error
+      // @ts-expect-error kind may not index node
       const kind = node.kind;
       if (kind !== "get" && kind !== "set" && this.match(tt.lt)) {
         node.typeParameters = this.flowParseTypeParameterDeclaration();

@@ -1,5 +1,5 @@
 FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = 8dcc0e1955b1753271ed0812d1a2a15a23de069b
+TEST262_COMMIT = aa3afd1c281aabaef78f35d30831e90ef97dad18
 TYPESCRIPT_COMMIT = ce85d647ef88183c019588bcf398320ce29b625a
 
 # Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
@@ -145,12 +145,13 @@ test-ci: build-standalone-ci
 
 test-ci-coverage:
 	BABEL_ENV=test BABEL_COVERAGE=true $(MAKE) bootstrap
-	BABEL_ENV=test BABEL_COVERAGE=true $(YARN) jest --maxWorkers=100% --ci
+	BABEL_ENV=test BABEL_COVERAGE=true $(YARN) jest --maxWorkers=100% --ci --coverage
 
 bootstrap-flow:
 	rm -rf build/flow
 	mkdir -p build
-	git clone --single-branch --shallow-since=2021-05-01 https://github.com/facebook/flow.git build/flow
+	git clone --filter=blob:none --sparse --single-branch --shallow-since=2021-05-01 https://github.com/facebook/flow.git build/flow
+	cd build/flow && git sparse-checkout set "src/parser/test/flow"
 	cd build/flow && git checkout -q $(FLOW_COMMIT)
 
 test-flow:
@@ -162,7 +163,8 @@ test-flow-update-allowlist:
 bootstrap-typescript:
 	rm -rf ./build/typescript
 	mkdir -p ./build
-	git clone --single-branch --shallow-since=2022-04-01 https://github.com/microsoft/TypeScript.git ./build/typescript
+	git clone --filter=blob:none --sparse --single-branch --shallow-since=2022-04-01 https://github.com/microsoft/TypeScript.git ./build/typescript
+	cd build/typescript && git sparse-checkout set "tests"
 	cd build/typescript && git checkout -q $(TYPESCRIPT_COMMIT)
 
 test-typescript:
@@ -174,7 +176,8 @@ test-typescript-update-allowlist:
 bootstrap-test262:
 	rm -rf build/test262
 	mkdir -p build
-	git clone --single-branch --shallow-since=2021-05-01 https://github.com/tc39/test262.git build/test262
+	git clone --filter=blob:none --sparse --single-branch --shallow-since=2021-05-01 https://github.com/tc39/test262.git build/test262
+	cd build/test262 && git sparse-checkout set "test"
 	cd build/test262 && git checkout -q $(TEST262_COMMIT)
 
 test-test262:

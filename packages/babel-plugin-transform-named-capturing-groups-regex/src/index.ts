@@ -7,8 +7,8 @@ export interface Options {
 }
 
 export default declare((api, options: Options) => {
-  const { runtime = true } = options;
-  if (typeof runtime !== "boolean") {
+  const { runtime } = options;
+  if (runtime !== undefined && typeof runtime !== "boolean") {
     throw new Error("The 'runtime' option must be boolean");
   }
 

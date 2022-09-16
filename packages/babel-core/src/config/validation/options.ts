@@ -1,7 +1,7 @@
 import type { InputTargets, Targets } from "@babel/helper-compilation-targets";
 
 import type { ConfigItem } from "../item";
-import Plugin from "../plugin";
+import type Plugin from "../plugin";
 
 import removed from "./removed";
 import {
@@ -456,8 +456,7 @@ function assertOverridesList(
       validateNested(overridesLoc, env);
     }
   }
-  // @ts-expect-error
-  return arr;
+  return arr as OverridesList;
 }
 
 export function checkNoUnwrappedItemOptionPairs(

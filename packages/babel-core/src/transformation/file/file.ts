@@ -1,6 +1,6 @@
 import * as helpers from "@babel/helpers";
-import { NodePath, Scope } from "@babel/traverse";
-import type { HubInterface, Visitor } from "@babel/traverse";
+import { NodePath } from "@babel/traverse";
+import type { HubInterface, Visitor, Scope } from "@babel/traverse";
 import { codeFrameColumns } from "@babel/code-frame";
 import traverse from "@babel/traverse";
 import { cloneNode, interpreterDirective } from "@babel/types";
@@ -210,7 +210,7 @@ export default class File {
     });
 
     nodes.forEach(node => {
-      // @ts-expect-error
+      // @ts-expect-error Fixeme: document _compact node property
       node._compact = true;
     });
 

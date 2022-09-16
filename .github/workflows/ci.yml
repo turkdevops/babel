@@ -197,8 +197,15 @@ jobs:
       - name: Downgrade Jest for node <= 10
         if: matrix.node-version == '6' || matrix.node-version == '8' || matrix.node-version == '10'
         run: |
-          yarn remove jest
-          yarn add --dev jest@24
+          yarn up jest@24
+          # Deduplicate dependencies, because duplicate copies of graceful-fs cause
+          # problems with the "path" module: https://github.com/facebook/jest/issues/9656
+          yarn dedupe
+      - name: Downgrade Jest and jest-light-runner for node == 12
+        if: matrix.node-version == '12'
+        run: |
+          yarn up jest@28
+          yarn up jest-light-runner@0.3.0
           # Deduplicate dependencies, because duplicate copies of graceful-fs cause
           # problems with the "path" module: https://github.com/facebook/jest/issues/9656
           yarn dedupe
@@ -227,10 +234,13 @@ jobs:
         with:
           node-version: "*"
 
-  test-babel-8-breaking:
-    name: Test Babel 8 breaking changes
+  build-babel8:
+    name: Build Babel 8 Artifacts for tests
     needs: prepare-yarn-cache
     runs-on: ubuntu-latest
+    # Yarn PnP does not support native ESM yet (https://github.com/yarnpkg/berry/issues/638)
+    # env:
+    #    YARN_NODE_LINKER: pnp # use pnp linker for better linking performance and stricter checks
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -251,6 +261,39 @@ jobs:
           BABEL_ENV: test
           BABEL_8_BREAKING: true
           BABEL_TYPES_8_BREAKING: true
+      - uses: actions/upload-artifact@v3
+        with:
+          name: babel8-test-artifact
+          path: |
+            codemods/*/lib/**/*
+            eslint/*/lib/**/*
+            packages/*/lib/**/*
+            packages/babel-standalone/*.js
+            !**/node_modules/**
+
+  test-babel-8-breaking:
+    name: Test Babel 8 breaking changes on Node.js
+    needs: build-babel8
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Use Node.js 14.17
+        uses: actions/setup-node@v3
+        with:
+          node-version: "14.17" # Node.js 14.17 is the first LTS supported by Babel 8
+          cache: "yarn"
+      - name: Install
+        run: |
+          yarn install
+      - uses: actions/download-artifact@v3
+        with:
+          name: babel8-test-artifact
+      - name: Generate runtime helpers
+        run: make build-plugin-transform-runtime-dist
       - name: Test
         # Hack: --color has supports-color@5 returned true for GitHub CI
         # Remove once `chalk` is bumped to 4.0.
@@ -280,8 +323,7 @@ jobs:
         with:
           name: babel-artifact
       - name: Generate runtime helpers
-        run: |
-          make build-plugin-transform-runtime-dist
+        run: make build-plugin-transform-runtime-dist
       - name: Test on Windows
         # Hack: --color has supports-color@5 returned true for GitHub CI
         # Remove once `chalk` is bumped to 4.0.
@@ -420,3 +462,25 @@ jobs:
           node-version: 16.6
       - name: Test Node.js 16.6
         run: yarn test:runtime:node
+
+  eslint7-test:
+    name: Test @babel/eslint-* with ESLint 7.5.0
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Use Node.js latest
+        uses: actions/setup-node@v3
+        with:
+          node-version: "*"
+          cache: "yarn"
+      - name: Install
+        run: yarn install
+      - uses: actions/download-artifact@v3
+        with:
+          name: babel-artifact
+      - name: Downgrade ESLint to 7.5.0
+        run: yarn up eslint@7.5.0
+      - name: Run babel/eslint tests
+        run: node ./node_modules/.bin/jest eslint
