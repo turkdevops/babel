@@ -1,6 +1,6 @@
 {
   "name": "@babel/runtime-corejs2",
-  "version": "7.20.1",
+  "version": "7.20.7",
   "description": "babel's modular runtime helpers with core-js@2 polyfilling",
   "license": "MIT",
   "publishConfig": {
@@ -90,6 +90,15 @@
       "./helpers/checkInRHS.js"
     ],
     "./helpers/esm/checkInRHS": "./helpers/esm/checkInRHS.js",
+    "./helpers/defineAccessor": [
+      {
+        "node": "./helpers/defineAccessor.js",
+        "import": "./helpers/esm/defineAccessor.js",
+        "default": "./helpers/defineAccessor.js"
+      },
+      "./helpers/defineAccessor.js"
+    ],
+    "./helpers/esm/defineAccessor": "./helpers/esm/defineAccessor.js",
     "./helpers/iterableToArrayLimit": [
       {
         "node": "./helpers/iterableToArrayLimit.js",

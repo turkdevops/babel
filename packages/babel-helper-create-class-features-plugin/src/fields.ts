@@ -10,6 +10,7 @@ import type {
 } from "@babel/helper-member-expression-to-functions";
 import optimiseCall from "@babel/helper-optimise-call-expression";
 import annotateAsPure from "@babel/helper-annotate-as-pure";
+import { isTransparentExprWrapper } from "@babel/helper-skip-transparent-expression-wrappers";
 
 import * as ts from "./typescript";
 
@@ -487,6 +488,7 @@ const privateNameHandlerLoose: Handler<PrivateNameState> = {
   boundGet(member) {
     return t.callExpression(
       t.memberExpression(this.get(member), t.identifier("bind")),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       [t.cloneNode(member.node.object as t.Expression)],
     );
   },
@@ -889,6 +891,15 @@ type ReplaceThisState = {
 const thisContextVisitor = traverse.visitors.merge<ReplaceThisState>([
   {
     ThisExpression(path, state) {
+      // Replace `delete this` with `true`
+      const parent = path.findParent(
+        path => !isTransparentExprWrapper(path.node),
+      );
+      if (t.isUnaryExpression(parent.node, { operator: "delete" })) {
+        path.parentPath.replaceWith(t.booleanLiteral(true));
+        return;
+      }
+
       state.needsClassRef = true;
       path.replaceWith(t.cloneNode(state.classRef));
     },
@@ -1045,7 +1056,7 @@ export function buildFieldsInitNodes(
         // We special-case the single expression case to avoid the iife, since
         // it's common.
         if (blockBody.length === 1 && t.isExpressionStatement(blockBody[0])) {
-          staticNodes.push(blockBody[0] as t.ExpressionStatement);
+          staticNodes.push(blockBody[0]);
         } else {
           staticNodes.push(template.statement.ast`(() => { ${blockBody} })()`);
         }
