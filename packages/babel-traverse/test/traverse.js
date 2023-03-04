@@ -337,4 +337,44 @@ describe("traverse", function () {
       expect(programShouldStop).toBe(false);
     });
   });
+  describe("traverse.explode", () => {
+    describe("deprecated types and aliases", () => {
+      beforeAll(() => {
+        jest.spyOn(console, "warn").mockImplementation(() => {});
+      });
+      afterAll(() => {
+        console.warn.mockClear();
+      });
+      it("should warn for deprecated node types", function testFn1() {
+        const visitNumericLiteral = () => {};
+        const visitor = {
+          NumberLiteral: visitNumericLiteral,
+        };
+        traverse.explode(visitor);
+        expect(console.warn).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /Visitor `NumberLiteral` has been deprecated, please migrate to `NumericLiteral`[^]+at.+testFn1/,
+          ),
+        );
+        expect(visitor).toHaveProperty("NumericLiteral.enter", [
+          visitNumericLiteral,
+        ]);
+      });
+      it("should warn for deprecated aliases", function testFn2() {
+        const visitImportOrExportDeclaration = () => {};
+        const visitor = {
+          ModuleDeclaration: visitImportOrExportDeclaration,
+        };
+        traverse.explode(visitor);
+        expect(console.warn).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /Visitor `ModuleDeclaration` has been deprecated, please migrate to `ImportOrExportDeclaration`[^]+at.+testFn2/,
+          ),
+        );
+        expect(visitor).toHaveProperty("ImportDeclaration.enter", [
+          visitImportOrExportDeclaration,
+        ]);
+      });
+    });
+  });
 });

@@ -4,6 +4,7 @@
  */
 import shallowEqual from "../../utils/shallowEqual";
 import type * as t from "../..";
+import deprecationWarning from "../../utils/deprecationWarning";
 
 export function isArrayExpression(
   node: object | null | undefined,
@@ -5184,10 +5185,10 @@ export function isClass(
 
   return false;
 }
-export function isModuleDeclaration(
+export function isImportOrExportDeclaration(
   node: object | null | undefined,
   opts?: object | null,
-): node is t.ModuleDeclaration {
+): node is t.ImportOrExportDeclaration {
   if (!node) return false;
 
   const nodeType = (node as t.Node).type;
@@ -5786,9 +5787,7 @@ export function isNumberLiteral(
   node: object | null | undefined,
   opts?: object | null,
 ): boolean {
-  console.trace(
-    "The node type NumberLiteral has been renamed to NumericLiteral",
-  );
+  deprecationWarning("isNumberLiteral", "isNumericLiteral");
   if (!node) return false;
 
   const nodeType = (node as t.Node).type;
@@ -5806,7 +5805,7 @@ export function isRegexLiteral(
   node: object | null | undefined,
   opts?: object | null,
 ): boolean {
-  console.trace("The node type RegexLiteral has been renamed to RegExpLiteral");
+  deprecationWarning("isRegexLiteral", "isRegExpLiteral");
   if (!node) return false;
 
   const nodeType = (node as t.Node).type;
@@ -5824,7 +5823,7 @@ export function isRestProperty(
   node: object | null | undefined,
   opts?: object | null,
 ): boolean {
-  console.trace("The node type RestProperty has been renamed to RestElement");
+  deprecationWarning("isRestProperty", "isRestElement");
   if (!node) return false;
 
   const nodeType = (node as t.Node).type;
@@ -5842,9 +5841,7 @@ export function isSpreadProperty(
   node: object | null | undefined,
   opts?: object | null,
 ): boolean {
-  console.trace(
-    "The node type SpreadProperty has been renamed to SpreadElement",
-  );
+  deprecationWarning("isSpreadProperty", "isSpreadElement");
   if (!node) return false;
 
   const nodeType = (node as t.Node).type;
@@ -5857,4 +5854,11 @@ export function isSpreadProperty(
   }
 
   return false;
+}
+export function isModuleDeclaration(
+  node: object | null | undefined,
+  opts?: object | null,
+): node is t.ImportOrExportDeclaration {
+  deprecationWarning("isModuleDeclaration", "isImportOrExportDeclaration");
+  return isImportOrExportDeclaration(node, opts);
 }

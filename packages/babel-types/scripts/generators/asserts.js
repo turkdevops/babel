@@ -1,5 +1,6 @@
 import {
   DEPRECATED_KEYS,
+  DEPRECATED_ALIASES,
   FLIPPED_ALIAS_KEYS,
   NODE_FIELDS,
   VISITOR_KEYS,
@@ -25,6 +26,7 @@ export default function generateAsserts() {
  */
 import is from "../../validators/is";
 import type * as t from "../..";
+import deprecationWarning from "../../utils/deprecationWarning";
 
 function assert(type: string, node: any, opts?: any): void {
   if (!is(type, node, opts)) {
@@ -39,14 +41,23 @@ function assert(type: string, node: any, opts?: any): void {
     output += addAssertHelper(type);
   });
 
-  Object.keys(FLIPPED_ALIAS_KEYS).forEach(type => {
-    output += addAssertHelper(type);
-  });
+  Object.keys(FLIPPED_ALIAS_KEYS)
+    .filter(
+      type => !Object.prototype.hasOwnProperty.call(DEPRECATED_ALIASES, type)
+    )
+    .forEach(type => {
+      output += addAssertHelper(type);
+    });
 
-  Object.keys(DEPRECATED_KEYS).forEach(type => {
-    const newType = DEPRECATED_KEYS[type];
+  const deprecatedNodeTypesAndAliases = {
+    ...DEPRECATED_KEYS,
+    ...DEPRECATED_ALIASES,
+  };
+
+  Object.keys(deprecatedNodeTypesAndAliases).forEach(type => {
+    const newType = deprecatedNodeTypesAndAliases[type];
     output += `export function assert${type}(node: any, opts: any): void {
-  console.trace("The node type ${type} has been renamed to ${newType}");
+      deprecationWarning("assert${type}", "assert${newType}");
   assert("${type}", node, opts);
 }\n`;
   });

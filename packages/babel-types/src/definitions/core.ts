@@ -492,6 +492,10 @@ export const patternLikeCommon = () => ({
         ),
     optional: true,
   },
+  optional: {
+    validate: assertValueType("boolean"),
+    optional: true,
+  },
   decorators: {
     validate: chain(
       assertValueType("array"),
@@ -521,10 +525,6 @@ defineType("Identifier", {
           { type: "string" },
         ),
       ),
-    },
-    optional: {
-      validate: assertValueType("boolean"),
-      optional: true,
     },
   },
   validate(parent, key, node) {
@@ -968,11 +968,6 @@ defineType("RestElement", {
             "TSNonNullExpression",
           ),
     },
-    // For Flow
-    optional: {
-      validate: assertValueType("boolean"),
-      optional: true,
-    },
   },
   validate(parent: t.ArrayPattern | t.ObjectPattern, key) {
     if (!process.env.BABEL_TYPES_8_BREAKING) return;
@@ -1285,18 +1280,6 @@ defineType("ArrayPattern", {
         assertEach(assertNodeOrValueType("null", "PatternLike", "LVal")),
       ),
     },
-    // For TypeScript
-    decorators: {
-      validate: chain(
-        assertValueType("array"),
-        assertEach(assertNodeType("Decorator")),
-      ),
-      optional: true,
-    },
-    optional: {
-      validate: assertValueType("boolean"),
-      optional: true,
-    },
   },
 });
 
@@ -1504,7 +1487,7 @@ defineType("ExportAllDeclaration", {
   aliases: [
     "Statement",
     "Declaration",
-    "ModuleDeclaration",
+    "ImportOrExportDeclaration",
     "ExportDeclaration",
   ],
   fields: {
@@ -1527,7 +1510,7 @@ defineType("ExportDefaultDeclaration", {
   aliases: [
     "Statement",
     "Declaration",
-    "ModuleDeclaration",
+    "ImportOrExportDeclaration",
     "ExportDeclaration",
   ],
   fields: {
@@ -1548,7 +1531,7 @@ defineType("ExportNamedDeclaration", {
   aliases: [
     "Statement",
     "Declaration",
-    "ModuleDeclaration",
+    "ImportOrExportDeclaration",
     "ExportDeclaration",
   ],
   fields: {
@@ -1692,7 +1675,7 @@ defineType("ForOfStatement", {
 
 defineType("ImportDeclaration", {
   visitor: ["specifiers", "source"],
-  aliases: ["Statement", "Declaration", "ModuleDeclaration"],
+  aliases: ["Statement", "Declaration", "ImportOrExportDeclaration"],
   fields: {
     assertions: {
       optional: true,

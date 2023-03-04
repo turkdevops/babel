@@ -160,6 +160,8 @@ export default declare((api, opts: Options) => {
             path.remove();
           }
         }
+      } else if (node.abstract) {
+        path.remove();
       } else if (!process.env.BABEL_8_BREAKING) {
         if (
           !allowDeclareFields &&
@@ -346,7 +348,7 @@ export default declare((api, opts: Options) => {
                 }
               }
 
-              if (isAllSpecifiersElided()) {
+              if (isAllSpecifiersElided() && !onlyRemoveTypeImports) {
                 stmt.remove();
               } else {
                 for (const importPath of importsToRemove) {
@@ -440,6 +442,10 @@ export default declare((api, opts: Options) => {
         }
 
         NEEDS_EXPLICIT_ESM.set(state.file.ast.program, false);
+      },
+
+      ExportAllDeclaration(path) {
+        if (path.node.exportKind === "type") path.remove();
       },
 
       ExportSpecifier(path) {

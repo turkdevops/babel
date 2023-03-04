@@ -1,6 +1,6 @@
 {
   "name": "@babel/standalone",
-  "version": "7.20.12",
+  "version": "7.21.2",
   "description": "Standalone build of Babel for use in non-Node.js environments.",
   "main": "./babel.js",
   "files": [
@@ -35,6 +35,7 @@
     "@babel/plugin-proposal-private-methods": "workspace:^",
     "@babel/plugin-proposal-private-property-in-object": "workspace:^",
     "@babel/plugin-proposal-record-and-tuple": "workspace:^",
+    "@babel/plugin-proposal-regexp-modifiers": "workspace:^",
     "@babel/plugin-proposal-throw-expressions": "workspace:^",
     "@babel/plugin-proposal-unicode-property-regex": "workspace:^",
     "@babel/plugin-proposal-unicode-sets-regex": "workspace:^",

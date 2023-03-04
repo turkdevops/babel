@@ -84,17 +84,22 @@ export default declare((api, opts: Options) => {
               const { usages, capturedInClosure, hasConstantViolations } =
                 getUsageInBody(binding, path);
 
-              if (capturedInClosure) {
-                markNeedsBodyWrap();
-                captured.push(name);
-              } else if (headScope.parent.hasBinding(name)) {
+              if (
+                headScope.parent.hasBinding(name) ||
+                headScope.parent.hasGlobal(name)
+              ) {
                 // If the binding is not captured, there is no need
                 // of adding it to the closure param. However, rename
                 // it if it shadows an outer binding, because the
                 // closure will be moved to an outer level.
                 const newName = headScope.generateUid(name);
-                headPath.scope.rename(name, newName);
+                headScope.rename(name, newName);
                 name = newName;
+              }
+
+              if (capturedInClosure) {
+                markNeedsBodyWrap();
+                captured.push(name);
               }
 
               if (isForStatement && hasConstantViolations) {
@@ -203,12 +208,8 @@ function transformBlockScopedVariable(
   }
 
   const blockScope = path.scope;
-  let varScope = blockScope.getFunctionParent();
-  let isProgramScope = false;
-  if (!varScope) {
-    varScope = blockScope.getProgramParent();
-    isProgramScope = true;
-  }
+  const varScope =
+    blockScope.getFunctionParent() || blockScope.getProgramParent();
 
   if (varScope !== blockScope) {
     for (const name of bindingNames) {
@@ -219,8 +220,7 @@ function transformBlockScopedVariable(
         // a nested scope and thus we don't need to assume that it
         // may be declared (but not registered yet) in an upper one.
         blockScope.parent.hasBinding(name, { noUids: true }) ||
-        blockScope.parent.hasGlobal(name) ||
-        (isProgramScope && varScope.hasGlobal(name))
+        blockScope.parent.hasGlobal(name)
       ) {
         newName = blockScope.generateUid(name);
         blockScope.rename(name, newName);

@@ -29,7 +29,7 @@ import { NodeUtils, type Undone } from "./node";
 import {
   type BindingTypes,
   BIND_NONE,
-  BIND_SCOPE_LEXICAL,
+  BIND_FLAGS_NO_LET_IN_LEXICAL,
 } from "../util/scopeflags";
 import type { ExpressionErrors } from "./util";
 import { Errors, type LValAncestor } from "../parse-error";
@@ -43,6 +43,12 @@ const unwrapParenthesizedExpression = (node: Node): Node => {
     ? unwrapParenthesizedExpression(node.expression)
     : node;
 };
+
+export const enum ParseBindingListFlags {
+  ALLOW_EMPTY = 1 << 0,
+  IS_FUNCTION_PARAMS = 1 << 1,
+  IS_CONSTRUCTOR_PARAMS = 1 << 2,
+}
 
 export default abstract class LValParser extends NodeUtils {
   // Forward-declaration: defined in expression.js
@@ -105,7 +111,7 @@ export default abstract class LValParser extends NodeUtils {
         // an LHS can be reinterpreted to a binding pattern but not vice versa.
         // therefore a parenthesized identifier is ambiguous until we are sure it is an assignment expression
         // i.e. `([(a) = []] = []) => {}`
-        // see also `recordArrowParemeterBindingError` signature in packages/babel-parser/src/util/expression-scope.js
+        // see also `recordArrowParameterBindingError` signature in packages/babel-parser/src/util/expression-scope.js
         if (parenthesized.type === "Identifier") {
           this.expressionScope.recordArrowParameterBindingError(
             Errors.InvalidParenthesizedAssignment,
@@ -366,7 +372,7 @@ export default abstract class LValParser extends NodeUtils {
         node.elements = this.parseBindingList(
           tt.bracketR,
           charCodes.rightSquareBracket,
-          true,
+          ParseBindingListFlags.ALLOW_EMPTY,
         );
         return this.finishNode(node, "ArrayPattern");
       }
@@ -384,9 +390,10 @@ export default abstract class LValParser extends NodeUtils {
     this: Parser,
     close: TokenType,
     closeCharCode: typeof charCodes[keyof typeof charCodes],
-    allowEmpty?: boolean,
-    allowModifiers?: boolean,
+    flags: ParseBindingListFlags,
   ): Array<Pattern | TSParameterProperty> {
+    const allowEmpty = flags & ParseBindingListFlags.ALLOW_EMPTY;
+
     const elts: Array<Pattern | TSParameterProperty> = [];
     let first = true;
     while (!this.eat(close)) {
@@ -400,7 +407,9 @@ export default abstract class LValParser extends NodeUtils {
       } else if (this.eat(close)) {
         break;
       } else if (this.match(tt.ellipsis)) {
-        elts.push(this.parseAssignableListItemTypes(this.parseRestBinding()));
+        elts.push(
+          this.parseAssignableListItemTypes(this.parseRestBinding(), flags),
+        );
         if (!this.checkCommaAfterRest(closeCharCode)) {
           this.expect(close);
           break;
@@ -416,7 +425,7 @@ export default abstract class LValParser extends NodeUtils {
         while (this.match(tt.at)) {
           decorators.push(this.parseDecorator());
         }
-        elts.push(this.parseAssignableListItem(allowModifiers, decorators));
+        elts.push(this.parseAssignableListItem(flags, decorators));
       }
     }
     return elts;
@@ -460,11 +469,11 @@ export default abstract class LValParser extends NodeUtils {
 
   parseAssignableListItem(
     this: Parser,
-    allowModifiers: boolean | undefined | null,
+    flags: ParseBindingListFlags,
     decorators: Decorator[],
   ): Pattern | TSParameterProperty {
     const left = this.parseMaybeDefault();
-    this.parseAssignableListItemTypes(left);
+    this.parseAssignableListItemTypes(left, flags);
     const elt = this.parseMaybeDefault(left.loc.start, left);
     if (decorators.length) {
       left.decorators = decorators;
@@ -473,7 +482,11 @@ export default abstract class LValParser extends NodeUtils {
   }
 
   // Used by flow/typescript plugin to add type annotations to binding elements
-  parseAssignableListItemTypes(param: Pattern): Pattern {
+  parseAssignableListItemTypes(
+    param: Pattern,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    flags: ParseBindingListFlags,
+  ): Pattern {
     return param;
   }
 
@@ -501,7 +514,7 @@ export default abstract class LValParser extends NodeUtils {
    * responsibilities. If we can definitively determine with the information
    * provided that this either *is* or *isn't* a valid `LVal`, then the return
    * value is easy: just return `true` or `false`. However, if it is a valid
-   * LVal *ancestor*, and thus it's descendents must be subsquently visited to
+   * LVal *ancestor*, and thus its descendants must be subsequently visited to
    * continue the "investigation", then this method should return the relevant
    * child key as a `string`. In some special cases, you additionally want to
    * convey that this node should be treated as if it were parenthesized. In
@@ -560,10 +573,6 @@ export default abstract class LValParser extends NodeUtils {
    *        `checkLVal` will add checked identifier name to `checkClashes` It is
    *        used in tracking duplicates in function parameter lists. If it is
    *        false, `checkLVal` will skip duplicate checks
-   * @param options.allowingSloppyLetBinding
-   *        Whether an identifier named "let" should be allowed in sloppy mode.
-   *        Defaults to `true` unless lexical scope its being used. This property
-   *        is only relevant if the parser's state is in sloppy mode.
    * @param options.strictModeChanged
    *        Whether an identifier has been parsed in a sloppy context but should
    *        be reinterpreted as strict-mode. e.g. `(arguments) => { "use strict "}`
@@ -579,14 +588,12 @@ export default abstract class LValParser extends NodeUtils {
       binding = BIND_NONE,
       checkClashes = false,
       strictModeChanged = false,
-      allowingSloppyLetBinding = !(binding & BIND_SCOPE_LEXICAL),
       hasParenthesizedAncestor = false,
     }: {
       in: LValAncestor;
       binding?: BindingTypes;
       checkClashes?: Set<string> | false;
       strictModeChanged?: boolean;
-      allowingSloppyLetBinding?: boolean;
       hasParenthesizedAncestor?: boolean;
     },
   ): void {
@@ -604,12 +611,11 @@ export default abstract class LValParser extends NodeUtils {
       return;
     }
 
-    if (expression.type === "Identifier") {
+    if (type === "Identifier") {
       this.checkIdentifier(
         expression as Identifier,
         binding,
         strictModeChanged,
-        allowingSloppyLetBinding,
       );
 
       const { name } = expression as Identifier;
@@ -626,7 +632,7 @@ export default abstract class LValParser extends NodeUtils {
     }
 
     const validity = this.isValidLVal(
-      expression.type,
+      type,
       !(hasParenthesizedAncestor || expression.extra?.parenthesized) &&
         ancestor.type === "AssignmentExpression",
       binding,
@@ -637,13 +643,7 @@ export default abstract class LValParser extends NodeUtils {
       const ParseErrorClass =
         binding === BIND_NONE ? Errors.InvalidLhs : Errors.InvalidLhsBinding;
 
-      this.raise(ParseErrorClass, {
-        at: expression,
-        ancestor:
-          ancestor.type === "UpdateExpression"
-            ? { type: "UpdateExpression", prefix: ancestor.prefix }
-            : { type: ancestor.type },
-      });
+      this.raise(ParseErrorClass, { at: expression, ancestor });
       return;
     }
 
@@ -651,21 +651,19 @@ export default abstract class LValParser extends NodeUtils {
       ? validity
       : [validity, type === "ParenthesizedExpression"];
     const nextAncestor =
-      expression.type === "ArrayPattern" ||
-      expression.type === "ObjectPattern" ||
-      expression.type === "ParenthesizedExpression"
-        ? expression
+      type === "ArrayPattern" ||
+      type === "ObjectPattern" ||
+      type === "ParenthesizedExpression"
+        ? ({ type } as const)
         : ancestor;
 
     // @ts-expect-error key may not index expression.
     for (const child of [].concat(expression[key])) {
       if (child) {
         this.checkLVal(child, {
-          // @ts-expect-error: refine types
           in: nextAncestor,
           binding,
           checkClashes,
-          allowingSloppyLetBinding,
           strictModeChanged,
           hasParenthesizedAncestor: isParenthesizedExpression,
         });
@@ -677,7 +675,6 @@ export default abstract class LValParser extends NodeUtils {
     at: Identifier,
     bindingType: BindingTypes,
     strictModeChanged: boolean = false,
-    allowLetBinding: boolean = !(bindingType & BIND_SCOPE_LEXICAL),
   ) {
     if (
       this.state.strict &&
@@ -695,7 +692,7 @@ export default abstract class LValParser extends NodeUtils {
       }
     }
 
-    if (!allowLetBinding && at.name === "let") {
+    if (bindingType & BIND_FLAGS_NO_LET_IN_LEXICAL && at.name === "let") {
       this.raise(Errors.LetInLexicalBinding, { at });
     }
 

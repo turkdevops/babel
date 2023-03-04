@@ -40,7 +40,7 @@ export default declare(({ types: t, template, assertVersion }) => {
 
     visitor: {
       // Run on ClassBody and not on class so that if @babel/helper-create-class-features-plugin
-      // is enabled it can generte optimized output without passing from the intermediate
+      // is enabled it can generate optimized output without passing from the intermediate
       // private fields representation.
       ClassBody(classBody) {
         const { scope } = classBody;
@@ -64,7 +64,10 @@ export default declare(({ types: t, template, assertVersion }) => {
           // We special-case the single expression case to avoid the iife, since
           // it's common.
           if (blockBody.length === 1 && t.isExpressionStatement(blockBody[0])) {
-            replacement = blockBody[0].expression;
+            replacement = t.inheritsComments(
+              blockBody[0].expression,
+              blockBody[0],
+            );
           } else {
             replacement = template.expression.ast`(() => { ${blockBody} })()`;
           }

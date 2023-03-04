@@ -12,6 +12,7 @@ export type Options = {
   startLine: number;
   allowAwaitOutsideFunction: boolean;
   allowReturnOutsideFunction: boolean;
+  allowNewTargetOutsideFunction: boolean;
   allowImportExportEverywhere: boolean;
   allowSuperOutsideMethod: boolean;
   allowUndeclaredExports: boolean;
@@ -22,6 +23,7 @@ export type Options = {
   createParenthesizedExpressions: boolean;
   errorRecovery: boolean;
   attachComment: boolean;
+  annexB: boolean;
 };
 
 export const defaultOptions: Options = {
@@ -41,6 +43,9 @@ export const defaultOptions: Options = {
   // When enabled, a return at the top level is not considered an
   // error.
   allowReturnOutsideFunction: false,
+  // When enabled, new.target outside a function or class is not
+  // considered an error.
+  allowNewTargetOutsideFunction: false,
   // When enabled, import/export statements are not constrained to
   // appearing at the top of the program.
   allowImportExportEverywhere: false,
@@ -74,11 +79,18 @@ export const defaultOptions: Options = {
   // is vital to preserve comments after transform. If you don't print AST back,
   // consider set this option to `false` for performance
   attachComment: true,
+  // When enabled, the parser will support Annex B syntax.
+  // https://tc39.es/ecma262/#sec-additional-ecmascript-features-for-web-browsers
+  annexB: true,
 };
 
 // Interpret and default an options object
 
 export function getOptions(opts?: Options | null): Options {
+  if (opts && opts.annexB != null && opts.annexB !== false) {
+    throw new Error("The `annexB` option can only be set to `false`.");
+  }
+
   const options: any = {};
   for (const key of Object.keys(defaultOptions)) {
     // @ts-expect-error key may not exist in opts

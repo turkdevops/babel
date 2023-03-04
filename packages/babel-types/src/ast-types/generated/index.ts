@@ -725,6 +725,7 @@ export interface AssignmentPattern extends BaseNode {
     | TSNonNullExpression;
   right: Expression;
   decorators?: Array<Decorator> | null;
+  optional?: boolean | null;
   typeAnnotation?: TypeAnnotation | TSTypeAnnotation | Noop | null;
 }
 
@@ -911,6 +912,7 @@ export interface ObjectPattern extends BaseNode {
   type: "ObjectPattern";
   properties: Array<RestElement | ObjectProperty>;
   decorators?: Array<Decorator> | null;
+  optional?: boolean | null;
   typeAnnotation?: TypeAnnotation | TSTypeAnnotation | Noop | null;
 }
 
@@ -2074,6 +2076,7 @@ export interface TSTypeParameter extends BaseNode {
   constraint?: TSType | null;
   default?: TSType | null;
   name: string;
+  const?: boolean | null;
   in?: boolean | null;
   out?: boolean | null;
 }
@@ -2453,7 +2456,7 @@ export type Property =
 export type UnaryLike = UnaryExpression | SpreadElement;
 export type Pattern = AssignmentPattern | ArrayPattern | ObjectPattern;
 export type Class = ClassExpression | ClassDeclaration;
-export type ModuleDeclaration =
+export type ImportOrExportDeclaration =
   | ExportAllDeclaration
   | ExportDefaultDeclaration
   | ExportNamedDeclaration
@@ -2741,6 +2744,11 @@ export type TSBaseType =
   | TSVoidKeyword
   | TSThisType
   | TSLiteralType;
+export type ModuleDeclaration =
+  | ExportAllDeclaration
+  | ExportDefaultDeclaration
+  | ExportNamedDeclaration
+  | ImportDeclaration;
 
 export interface Aliases {
   Standardized: Standardized;
@@ -2774,7 +2782,7 @@ export interface Aliases {
   UnaryLike: UnaryLike;
   Pattern: Pattern;
   Class: Class;
-  ModuleDeclaration: ModuleDeclaration;
+  ImportOrExportDeclaration: ImportOrExportDeclaration;
   ExportDeclaration: ExportDeclaration;
   ModuleSpecifier: ModuleSpecifier;
   Accessor: Accessor;
@@ -2792,6 +2800,7 @@ export interface Aliases {
   TSTypeElement: TSTypeElement;
   TSType: TSType;
   TSBaseType: TSBaseType;
+  ModuleDeclaration: ModuleDeclaration;
 }
 
 export type DeprecatedAliases =

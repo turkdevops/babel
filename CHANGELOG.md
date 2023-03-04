@@ -23,6 +23,110 @@ See [`eslint-plugin-babel`'s releases](https://github.com/babel/eslint-plugin-ba
 
 <!-- DO NOT CHANGE THESE COMMENTS - See .github/actions/trigger-github-release/update-changelog.js -->
 <!-- insert-new-changelog-here -->
+## v7.21.2 (2023-02-23)
+
+#### :eyeglasses: Spec Compliance
+* `babel-parser`
+  * [#15439](https://github.com/babel/babel/pull/15439) fix: Throws on `new foo?.bar!()` ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+
+#### :nail_care: Polish
+* `babel-traverse`, `babel-types`
+  * [#15448](https://github.com/babel/babel/pull/15448) Reduce warnings for deprecated node aliases ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+
+#### :house: Internal
+* `babel-types`
+  * [#15451](https://github.com/babel/babel/pull/15451) Update babel-types docs generator ([@JLHwung](https://github.com/JLHwung))
+
+#### :microscope: Output optimization
+* `babel-helper-module-transforms`, `babel-plugin-transform-modules-commonjs`
+  * [#15449](https://github.com/babel/babel/pull/15449) Avoid unnecessary code for unused lazy imports ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+## v7.21.1 (2023-02-20)
+
+#### :bug: Bug Fix
+* `babel-core`, `babel-parser`
+  * [#15440](https://github.com/babel/babel/pull/15440) Fix problems found while publishing 7.21.0 ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+* `babel-generator`
+  * [#15445](https://github.com/babel/babel/pull/15445) fix: Handling source maps without `sourcesContent` ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+
+#### :house: Internal
+* [#15443](https://github.com/babel/babel/pull/15443) Use native GitHub markdown `Note` admonition ([@yardenshoham](https://github.com/yardenshoham))
+## v7.21.0 (2023-02-20)
+
+#### :rocket: New Feature
+* `babel-core`, `babel-helper-create-class-features-plugin`, `babel-plugin-proposal-class-properties`, `babel-plugin-proposal-private-methods`, `babel-plugin-proposal-private-property-in-object`
+  * [#15435](https://github.com/babel/babel/pull/15435) feat: Implement `privateFieldsAsSymbols` assumption for classes ([@fwienber](https://github.com/fwienber))
+* `babel-helper-create-regexp-features-plugin`, `babel-plugin-proposal-regexp-modifiers`, `babel-standalone`
+  * [#15226](https://github.com/babel/babel/pull/15226) feat: Support regexp modifiers proposal ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-cli`, `babel-core`, `babel-generator`, `babel-plugin-transform-destructuring`, `babel-plugin-transform-modules-commonjs`, `babel-plugin-transform-react-jsx`, `babel-traverse`
+  * [#15022](https://github.com/babel/babel/pull/15022) feat: Generate sourcemaps of friendly call frames ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-parser`, `babel-types`
+  * [#15384](https://github.com/babel/babel/pull/15384) [ts] Support `const` modifier in type parameters ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+* `babel-generator`, `babel-helpers`, `babel-parser`, `babel-plugin-proposal-decorators`, `babel-plugin-syntax-decorators`, `babel-runtime-corejs2`, `babel-runtime-corejs3`, `babel-runtime`
+  * [#15405](https://github.com/babel/babel/pull/15405) Implement decorators as presented at `2023-01` TC39 meeting ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+* `babel-parser`
+  * [#15114](https://github.com/babel/babel/pull/15114) Parser option to allow `new.target` outside functions ([@overlookmotel](https://github.com/overlookmotel))
+  * [#15320](https://github.com/babel/babel/pull/15320) Add `annexb: false` parser option to disable Annex B ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+* `babel-core`
+  * [#15283](https://github.com/babel/babel/pull/15283) feat: Support `.cts` as configuration file ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-generator`, `babel-parser`, `babel-plugin-transform-typescript`
+  * [#15381](https://github.com/babel/babel/pull/15381) [ts] Support `export type * from` ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+
+#### :bug: Bug Fix
+* `babel-plugin-transform-typescript`
+  * [#15379](https://github.com/babel/babel/pull/15379) [ts5.0] Better inlining of constants in enums ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-core`
+  * [#15366](https://github.com/babel/babel/pull/15366) handling circular/shared structures in deep-clone ([@azizghuloum](https://github.com/azizghuloum))
+* `babel-helper-create-class-features-plugin`, `babel-plugin-proposal-class-properties`, `babel-plugin-proposal-class-static-block`, `babel-plugin-proposal-private-methods`, `babel-plugin-transform-classes`, `babel-plugin-transform-new-target`
+  * [#15406](https://github.com/babel/babel/pull/15406) Preserve class elements comments in class transform ([@JLHwung](https://github.com/JLHwung))
+* `babel-parser`, `babel-plugin-transform-flow-comments`, `babel-plugin-transform-flow-strip-types`, `babel-types`
+  * [#15414](https://github.com/babel/babel/pull/15414) [ts] Fix restrictions for optional parameters ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+
+#### :nail_care: Polish
+* `babel-parser`
+  * [#15400](https://github.com/babel/babel/pull/15400) polish: improve "`await` as identifier" error in modules ([@JLHwung](https://github.com/JLHwung))
+
+#### :house: Internal
+* `babel-core`
+  * [#15137](https://github.com/babel/babel/pull/15137) Improve CJS compat with ESM-based `@babel/core` ([@nicolo-ribaudo](https://github.com/nicolo-ribaudo))
+
+#### :microscope: Output optimization
+* `babel-plugin-transform-typescript`
+  * [#15418](https://github.com/babel/babel/pull/15418) [ts] Handle exponentiation operator in constant folding ([@ehoogeveen-medweb](https://github.com/ehoogeveen-medweb))
+
+## v7.20.15 (2023-02-02)
+
+#### :eyeglasses: Spec Compliance
+* `babel-parser`
+  * [#15391](https://github.com/babel/babel/pull/15391) Disallow await as bound name in using declaration ([@JLHwung](https://github.com/JLHwung))
+* `babel-generator`, `babel-parser`, `babel-plugin-proposal-export-namespace-from`
+  * [#15385](https://github.com/babel/babel/pull/15385) Disallows specifiers after export * as ns ([@JLHwung](https://github.com/JLHwung))
+
+#### :bug: Bug Fix
+* `babel-plugin-transform-block-scoping`
+  * [#15398](https://github.com/babel/babel/pull/15398) fix: Loop was converted wrong ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-parser`
+  * [#15377](https://github.com/babel/babel/pull/15377) fix: `new (foo?.bar)()` incorrectly throws exception `OptionalChainingNoNew` ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+## v7.20.14 (2023-01-27)
+
+#### :bug: Bug Fix
+* `babel-plugin-transform-block-scoping`
+  * [#15361](https://github.com/babel/babel/pull/15361) fix: Identifiers in the loop are not renamed ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-cli`, `babel-core`, `babel-generator`, `babel-helper-transform-fixture-test-runner`, `babel-plugin-transform-destructuring`, `babel-plugin-transform-modules-commonjs`, `babel-plugin-transform-react-jsx`, `babel-traverse`
+  * [#15365](https://github.com/babel/babel/pull/15365) fix: Properly generate source maps for manually added multi-line content ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+## v7.20.13 (2023-01-21)
+
+#### :bug: Bug Fix
+* `babel-helpers`, `babel-plugin-proposal-decorators`, `babel-runtime-corejs2`, `babel-runtime-corejs3`, `babel-runtime`
+  * [#15332](https://github.com/babel/babel/pull/15332) Ensure class decorators can access decorated non-static members ([@JLHwung](https://github.com/JLHwung))
+* `babel-plugin-transform-typescript`
+  * [#15349](https://github.com/babel/babel/pull/15349) fix: Preserve `import {type T} from 'x'` when `onlyRemoveTypeImports:true` ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+  * [#15344](https://github.com/babel/babel/pull/15344) fix: Properties that are `abstract` should not be initialized. ([@liuxingbaoyu](https://github.com/liuxingbaoyu))
+* `babel-parser`
+  * [#15338](https://github.com/babel/babel/pull/15338) Allow negative number in ambient const initializer ([@JLHwung](https://github.com/JLHwung))
+
+#### :leftwards_arrow_with_hook: Revert
+* `babel-plugin-transform-react-inline-elements`, `babel-plugin-transform-react-jsx-development`, `babel-plugin-transform-react-jsx`
+  * [#15355](https://github.com/babel/babel/pull/15355) Reverts "Re-use common JSX element transform for <>...</>" ([@JLHwung](https://github.com/JLHwung))
 ## v7.20.12 (2023-01-04)
 
 #### :bug: Bug Fix

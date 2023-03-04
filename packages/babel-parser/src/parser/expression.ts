@@ -95,10 +95,7 @@ export default abstract class ExpressionParser extends LValParser {
     allowExpressionBody?: boolean,
     isAsync?: boolean,
   ): T;
-  abstract parseFunctionParams(
-    node: N.Function,
-    allowModifiers?: boolean,
-  ): void;
+  abstract parseFunctionParams(node: N.Function, isConstructor?: boolean): void;
   abstract parseBlockOrModuleBlockBody(
     body: N.Statement[],
     directives: N.Directive[] | null | undefined,
@@ -768,10 +765,15 @@ export default abstract class ExpressionParser extends LValParser {
     let optional = false;
 
     if (type === tt.questionDot) {
-      if (noCalls && this.lookaheadCharCode() === charCodes.leftParenthesis) {
-        // stop at `?.` when parsing `new a?.()`
-        state.stop = true;
-        return base;
+      if (noCalls) {
+        this.raise(Errors.OptionalChainingNoNew, {
+          at: this.state.startLoc,
+        });
+        if (this.lookaheadCharCode() === charCodes.leftParenthesis) {
+          // stop at `?.` when parsing `new a?.()`
+          state.stop = true;
+          return base;
+        }
       }
       state.optionalChainMember = optional = true;
       this.next();
@@ -1883,7 +1885,11 @@ export default abstract class ExpressionParser extends LValParser {
         "target",
       );
 
-      if (!this.scope.inNonArrowFunction && !this.scope.inClass) {
+      if (
+        !this.scope.inNonArrowFunction &&
+        !this.scope.inClass &&
+        !this.options.allowNewTargetOutsideFunction
+      ) {
         this.raise(Errors.UnexpectedNewTarget, { at: metaProp });
       }
 
@@ -1918,14 +1924,6 @@ export default abstract class ExpressionParser extends LValParser {
     node.callee = this.parseNoCallExpr();
     if (node.callee.type === "Import") {
       this.raise(Errors.ImportCallNotNewExpression, { at: node.callee });
-    } else if (this.isOptionalChain(node.callee)) {
-      this.raise(Errors.OptionalChainingNoNew, {
-        at: this.state.lastTokEndLoc,
-      });
-    } else if (this.eat(tt.questionDot)) {
-      this.raise(Errors.OptionalChainingNoNew, {
-        at: this.state.startLoc,
-      });
     }
   }
 
@@ -2424,7 +2422,6 @@ export default abstract class ExpressionParser extends LValParser {
   ): T {
     this.initFunction(node, isAsync);
     node.generator = isGenerator;
-    const allowModifiers = isConstructor; // For TypeScript parameter properties
     this.scope.enter(
       SCOPE_FUNCTION |
         SCOPE_SUPER |
@@ -2432,7 +2429,7 @@ export default abstract class ExpressionParser extends LValParser {
         (allowDirectSuper ? SCOPE_DIRECT_SUPER : 0),
     );
     this.prodParam.enter(functionFlags(isAsync, node.generator));
-    this.parseFunctionParams(node, allowModifiers);
+    this.parseFunctionParams(node, isConstructor);
     const finishedNode = this.parseFunctionBodyAndFinish(node, type, true);
     this.prodParam.exit();
     this.scope.exit();
@@ -2568,7 +2565,7 @@ export default abstract class ExpressionParser extends LValParser {
                 (node.kind === "method" || node.kind === "constructor") &&
                 // @ts-expect-error key may not index node
                 !!node.key
-                  ? // @ts-expect-error node.key has been gaurded
+                  ? // @ts-expect-error node.key has been guarded
                     node.key.loc.end
                   : node,
             });
@@ -2790,7 +2787,27 @@ export default abstract class ExpressionParser extends LValParser {
       return;
     }
 
-    if (word === "yield") {
+    if (checkKeywords && isKeyword(word)) {
+      this.raise(Errors.UnexpectedKeyword, {
+        at: startLoc,
+        keyword: word,
+      });
+      return;
+    }
+
+    const reservedTest = !this.state.strict
+      ? isReservedWord
+      : isBinding
+      ? isStrictBindReservedWord
+      : isStrictReservedWord;
+
+    if (reservedTest(word, this.inModule)) {
+      this.raise(Errors.UnexpectedReservedWord, {
+        at: startLoc,
+        reservedWord: word,
+      });
+      return;
+    } else if (word === "yield") {
       if (this.prodParam.hasYield) {
         this.raise(Errors.YieldBindingIdentifier, { at: startLoc });
         return;
@@ -2814,27 +2831,6 @@ export default abstract class ExpressionParser extends LValParser {
         this.raise(Errors.ArgumentsInClass, { at: startLoc });
         return;
       }
-    }
-
-    if (checkKeywords && isKeyword(word)) {
-      this.raise(Errors.UnexpectedKeyword, {
-        at: startLoc,
-        keyword: word,
-      });
-      return;
-    }
-
-    const reservedTest = !this.state.strict
-      ? isReservedWord
-      : isBinding
-      ? isStrictBindReservedWord
-      : isStrictReservedWord;
-
-    if (reservedTest(word, this.inModule)) {
-      this.raise(Errors.UnexpectedReservedWord, {
-        at: startLoc,
-        reservedWord: word,
-      });
     }
   }
 

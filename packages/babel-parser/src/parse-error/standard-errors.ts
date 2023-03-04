@@ -14,6 +14,7 @@ export type LValAncestor =
         | "ImportSpecifier"
         | "ImportNamespaceSpecifier"
         | "ImportDefaultSpecifier"
+        | "ParenthesizedExpression"
         | "ObjectPattern"
         | "RestElement"
         | "VariableDeclarator";
@@ -32,6 +33,8 @@ export default {
     "Can not use 'await' as identifier inside a static block.",
   AwaitExpressionFormalParameter:
     "'await' is not allowed in async function parameters.",
+  AwaitInUsingBinding:
+    "'await' is not allowed to be used as a name in 'using' declarations.",
   AwaitNotInAsyncContext:
     "'await' is only allowed within async functions and at the top levels of modules.",
   AwaitNotInAsyncFunction: "'await' is only allowed within async functions.",
@@ -53,11 +56,13 @@ export default {
   DecoratorArgumentsOutsideParentheses:
     "Decorator arguments must be moved inside parentheses: use '@(decorator(args))' instead of '@(decorator)(args)'.",
   DecoratorBeforeExport:
-    "Decorators must be placed *before* the 'export' keyword. You can set the 'decoratorsBeforeExport' option to false to use the 'export @decorator class {}' syntax.",
+    "Decorators must be placed *before* the 'export' keyword. Remove the 'decoratorsBeforeExport: true' option to use the 'export @decorator class {}' syntax.",
+  DecoratorsBeforeAfterExport:
+    "Decorators can be placed *either* before or after the 'export' keyword, but not in both locations at the same time.",
   DecoratorConstructor:
     "Decorators can't be used with a constructor. Did you mean '@dec class { ... }'?",
   DecoratorExportClass:
-    "Using the export keyword between a decorator and a class is not allowed. Please use `export @dec class` instead.",
+    "Decorators must be placed *after* the 'export' keyword. Remove the 'decoratorsBeforeExport: false' option to use the '@decorator export class {}' syntax.",
   DecoratorSemicolon: "Decorators must not be followed by a semicolon.",
   DecoratorStaticBlock: "Decorators can't be used with a static block.",
   DeletePrivateField: "Deleting a private field is not allowed.",
@@ -223,6 +228,8 @@ export default {
   RecordNoProto: "'__proto__' is not allowed in Record expressions.",
   RestTrailingComma: "Unexpected trailing comma after rest element.",
   SloppyFunction:
+    "In non-strict mode code, functions can only be declared at top level or inside a block.",
+  SloppyFunctionAnnexB:
     "In non-strict mode code, functions can only be declared at top level, inside a block, or as the body of an if statement.",
   StaticPrototype: "Classes may not have static property named prototype.",
   SuperNotAllowed:

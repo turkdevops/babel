@@ -76,7 +76,7 @@ function normalizeOptions(
   };
 
   if (!process.env.BABEL_8_BREAKING) {
-    format.decoratorsBeforeExport = !!opts.decoratorsBeforeExport;
+    format.decoratorsBeforeExport = opts.decoratorsBeforeExport;
     format.jsonCompatibleStrings = opts.jsonCompatibleStrings;
   }
 
@@ -95,7 +95,7 @@ function normalizeOptions(
   }
 
   if (format.compact === "auto") {
-    format.compact = code.length > 500_000; // 500KB
+    format.compact = typeof code === "string" && code.length > 500_000; // 500KB
 
     if (format.compact) {
       console.error(
@@ -135,7 +135,7 @@ export interface GeneratorOptions {
 
   /**
    * Function that takes a comment (as a string) and returns true if the comment should be included in the output.
-   * By default, comments are included if `opts.comments` is `true` or if `opts.minifed` is `false` and the comment
+   * By default, comments are included if `opts.comments` is `true` or if `opts.minified` is `false` and the comment
    * contains `@preserve` or `@license`.
    */
   shouldPrintComment?(comment: string): boolean;
@@ -182,6 +182,8 @@ export interface GeneratorOptions {
    */
   sourceMaps?: boolean;
 
+  inputSourceMap?: any;
+
   /**
    * A root for all relative URLs in the source map.
    */
@@ -200,8 +202,9 @@ export interface GeneratorOptions {
   jsonCompatibleStrings?: boolean;
 
   /**
-   * Set to true to enable support for experimental decorators syntax before module exports.
-   * Defaults to `false`.
+   * Set to true to enable support for experimental decorators syntax before
+   * module exports. If not specified, decorators will be printed in the same
+   * position as they were in the input source code.
    * @deprecated Removed in Babel 8
    */
   decoratorsBeforeExport?: boolean;

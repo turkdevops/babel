@@ -1,4 +1,4 @@
-import Buffer from "./buffer";
+import Buffer, { type Pos } from "./buffer";
 import type { Loc } from "./buffer";
 import * as n from "./node";
 import type * as t from "@babel/types";
@@ -18,6 +18,7 @@ import type { Opts as jsescOptions } from "jsesc";
 import * as generatorFunctions from "./generators";
 import type SourceMap from "./source-map";
 import * as charCodes from "charcodes";
+import { type TraceMap } from "@jridgewell/trace-mapping";
 
 const SCIENTIFIC_NOTATION = /e/i;
 const ZERO_DECIMAL_INTEGER = /\.0+$/;
@@ -101,7 +102,10 @@ class Printer {
 
     this._indentChar = format.indent.style.charCodeAt(0);
     this._indentRepeat = format.indent.style.length;
+
+    this._inputMap = map?._inputMap;
   }
+  declare _inputMap: TraceMap;
 
   declare format: Format;
   inForStatementInitCounter: number = 0;
@@ -362,6 +366,14 @@ class Printer {
     this._catchUp(prop, loc);
 
     this._buf.withSource(prop, loc, cb);
+  }
+
+  sourceIdentifierName(identifierName: string, pos?: Pos): void {
+    if (!this._buf._canMarkIdName) return;
+
+    const sourcePosition = this._buf._sourcePosition;
+    sourcePosition.identifierNamePos = pos;
+    sourcePosition.identifierName = identifierName;
   }
 
   _space(): void {
@@ -799,7 +811,7 @@ class Printer {
   _printTrailingComments(node: t.Node, parent?: t.Node, lineOffset?: number) {
     const { innerComments, trailingComments } = node;
     // We print inner comments here, so that if for some reason they couldn't
-    // be printed in earlier locations they are still printed *somehwere*,
+    // be printed in earlier locations they are still printed *somewhere*,
     // even if at the end of the node.
     if (innerComments?.length) {
       this._printComments(

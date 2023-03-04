@@ -1,4 +1,5 @@
 import {
+  DEPRECATED_ALIASES,
   DEPRECATED_KEYS,
   FLIPPED_ALIAS_KEYS,
   NODE_FIELDS,
@@ -71,20 +72,37 @@ export default function generateValidators() {
  * To re-generate run 'make build'
  */
 import shallowEqual from "../../utils/shallowEqual";
-import type * as t from "../..";\n\n`;
+import type * as t from "../..";
+import deprecationWarning from "../../utils/deprecationWarning";
+\n`;
 
   Object.keys(VISITOR_KEYS).forEach(type => {
     output += addIsHelper(type);
   });
 
-  Object.keys(FLIPPED_ALIAS_KEYS).forEach(type => {
-    output += addIsHelper(type, FLIPPED_ALIAS_KEYS[type]);
-  });
+  Object.keys(FLIPPED_ALIAS_KEYS)
+    .filter(
+      type => !Object.prototype.hasOwnProperty.call(DEPRECATED_ALIASES, type)
+    )
+    .forEach(type => {
+      output += addIsHelper(type, FLIPPED_ALIAS_KEYS[type]);
+    });
 
   Object.keys(DEPRECATED_KEYS).forEach(type => {
-    const newType = DEPRECATED_KEYS[type];
-    const deprecated = `console.trace("The node type ${type} has been renamed to ${newType}");`;
-    output += addIsHelper(type, null, deprecated);
+    output += addIsHelper(
+      type,
+      null,
+      `deprecationWarning("is${type}", "is${DEPRECATED_KEYS[type]}")`
+    );
+  });
+
+  Object.keys(DEPRECATED_ALIASES).forEach(type => {
+    const newType = DEPRECATED_ALIASES[type];
+    output += `export function is${type}(node: object | null | undefined, opts?: object | null): node is t.${newType} {
+  deprecationWarning("is${type}", "is${newType}");
+  return is${newType}(node, opts);
+}
+`;
   });
 
   return output;

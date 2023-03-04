@@ -1,9 +1,6 @@
-FLOW_COMMIT = 92bbb5e9dacb8185aa73ea343954d0434b42c40b
-TEST262_COMMIT = e1048d0afff177ebe1d8aa0e9ced13702470f47f
-TYPESCRIPT_COMMIT = ce85d647ef88183c019588bcf398320ce29b625a
-
-# Fix color output until TravisCI fixes https://github.com/travis-ci/travis-ci/issues/7967
-export FORCE_COLOR = true
+FLOW_COMMIT = 105ad30f566f401db9cafcb49cd2831fb29e87c5
+TEST262_COMMIT = d216cc197269fc41eb6eca14710529c3d6650535
+TYPESCRIPT_COMMIT = d87d0adcd30ac285393bf3bfbbb4d94d50c4f3c9
 
 SOURCES = packages codemods eslint
 
@@ -149,11 +146,7 @@ test-ci-coverage:
 	rm -rf coverage/tmp
 
 bootstrap-flow:
-	rm -rf build/flow
-	mkdir -p build
-	git clone --filter=blob:none --sparse --single-branch --shallow-since=2021-05-01 https://github.com/facebook/flow.git build/flow
-	cd build/flow && git sparse-checkout set "src/parser/test/flow"
-	cd build/flow && git checkout -q $(FLOW_COMMIT)
+	$(MAKEJS) bootstrap-flow
 
 test-flow:
 	$(NODE) scripts/parser-tests/flow
@@ -162,11 +155,7 @@ test-flow-update-allowlist:
 	$(NODE) scripts/parser-tests/flow --update-allowlist
 
 bootstrap-typescript:
-	rm -rf ./build/typescript
-	mkdir -p ./build
-	git clone --filter=blob:none --sparse --single-branch --shallow-since=2022-04-01 https://github.com/microsoft/TypeScript.git ./build/typescript
-	cd build/typescript && git sparse-checkout set "tests"
-	cd build/typescript && git checkout -q $(TYPESCRIPT_COMMIT)
+	$(MAKEJS) bootstrap-typescript
 
 test-typescript:
 	$(NODE) scripts/parser-tests/typescript
@@ -175,11 +164,7 @@ test-typescript-update-allowlist:
 	$(NODE) scripts/parser-tests/typescript --update-allowlist
 
 bootstrap-test262:
-	rm -rf build/test262
-	mkdir -p build
-	git clone --filter=blob:none --sparse --single-branch --shallow-since=2021-05-01 https://github.com/tc39/test262.git build/test262
-	cd build/test262 && git sparse-checkout set "test" "harness"
-	cd build/test262 && git checkout -q $(TEST262_COMMIT)
+	$(MAKEJS) bootstrap-test262
 
 test-test262:
 	$(NODE) scripts/parser-tests/test262
@@ -189,15 +174,15 @@ test-test262-update-allowlist:
 
 
 new-version-checklist:
-       # @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       # @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       # @echo "!!!!!!                                                   !!!!!!"
-       # @echo "!!!!!! Add any message here, and UNCOMMENT THESE LINES!  !!!!!!"
-       # @echo "!!!!!!                                                   !!!!!!"
-       # @echo "!!!!!!                                                   !!!!!!"
-       # @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       # @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-       # @exit 1
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!                                                   !!!!!!"
+	# @echo "!!!!!!   Write any release-blocking message here, and    !!!!!!"
+	# @echo "!!!!!!              UNCOMMENT THESE LINES                !!!!!!"
+	# @echo "!!!!!!                                                   !!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+	# @exit 1
 
 new-version:
 	$(MAKE) new-version-checklist
