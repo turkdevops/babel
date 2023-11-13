@@ -1,5 +1,5 @@
 import * as charCodes from "charcodes";
-import { tt, type TokenType } from "../tokenizer/types";
+import { tt, type TokenType } from "../tokenizer/types.ts";
 import type {
   AssignmentPattern,
   TSParameterProperty,
@@ -19,21 +19,17 @@ import type {
   ObjectPattern,
   ArrayExpression,
   ArrayPattern,
-} from "../types";
-import type { Pos, Position } from "../util/location";
+} from "../types.ts";
+import type { Pos, Position } from "../util/location.ts";
 import {
   isStrictBindOnlyReservedWord,
   isStrictBindReservedWord,
-} from "../util/identifier";
-import { NodeUtils, type Undone } from "./node";
-import {
-  type BindingTypes,
-  BIND_NONE,
-  BIND_FLAGS_NO_LET_IN_LEXICAL,
-} from "../util/scopeflags";
-import type { ExpressionErrors } from "./util";
-import { Errors, type LValAncestor } from "../parse-error";
-import type Parser from "./index";
+} from "../util/identifier.ts";
+import { NodeUtils, type Undone } from "./node.ts";
+import { type BindingTypes, BindingFlag } from "../util/scopeflags.ts";
+import type { ExpressionErrors } from "./util.ts";
+import { Errors, type LValAncestor } from "../parse-error.ts";
+import type Parser from "./index.ts";
 
 const getOwn = <T extends {}>(object: T, key: keyof T) =>
   Object.hasOwnProperty.call(object, key) && object[key];
@@ -117,7 +113,10 @@ export default abstract class LValParser extends NodeUtils {
             Errors.InvalidParenthesizedAssignment,
             { at: node },
           );
-        } else if (parenthesized.type !== "MemberExpression") {
+        } else if (
+          parenthesized.type !== "MemberExpression" &&
+          !this.isOptionalMemberExpression(parenthesized)
+        ) {
           // A parenthesized member expression can be in LHS but not in pattern.
           // If the LHS is later interpreted as a pattern, `checkLVal` will throw for member expression binding
           // i.e. `([(a.b) = []] = []) => {}`
@@ -389,7 +388,7 @@ export default abstract class LValParser extends NodeUtils {
   parseBindingList(
     this: Parser,
     close: TokenType,
-    closeCharCode: typeof charCodes[keyof typeof charCodes],
+    closeCharCode: (typeof charCodes)[keyof typeof charCodes],
     flags: ParseBindingListFlags,
   ): Array<Pattern | TSParameterProperty> {
     const allowEmpty = flags & ParseBindingListFlags.ALLOW_EMPTY;
@@ -556,6 +555,11 @@ export default abstract class LValParser extends NodeUtils {
     );
   }
 
+  // Overridden by the estree plugin
+  isOptionalMemberExpression(expression: Node) {
+    return expression.type === "OptionalMemberExpression";
+  }
+
   /**
    * Verify that a target expression is an lval (something that can be assigned to).
    *
@@ -566,7 +570,7 @@ export default abstract class LValParser extends NodeUtils {
    *        if the check fails.
    * @param options.binding
    *        The desired binding type. If the given expression is an identifier
-   *        and `binding` is not `BIND_NONE`, `checkLVal` will register binding
+   *        and `binding` is not `BindingFlag.TYPE_NONE`, `checkLVal` will register binding
    *        to the parser scope See also `src/util/scopeflags.js`
    * @param options.checkClashes
    *        An optional string set to check if an identifier name is included.
@@ -585,7 +589,7 @@ export default abstract class LValParser extends NodeUtils {
     expression: Expression | ObjectMember | RestElement,
     {
       in: ancestor,
-      binding = BIND_NONE,
+      binding = BindingFlag.TYPE_NONE,
       checkClashes = false,
       strictModeChanged = false,
       hasParenthesizedAncestor = false,
@@ -604,8 +608,21 @@ export default abstract class LValParser extends NodeUtils {
     // toAssignable already reported this error with a nicer message.
     if (this.isObjectMethod(expression)) return;
 
-    if (type === "MemberExpression") {
-      if (binding !== BIND_NONE) {
+    const isOptionalMemberExpression =
+      this.isOptionalMemberExpression(expression);
+
+    if (isOptionalMemberExpression || type === "MemberExpression") {
+      if (isOptionalMemberExpression) {
+        this.expectPlugin("optionalChainingAssign", expression.loc.start);
+        if (ancestor.type !== "AssignmentExpression") {
+          this.raise(Errors.InvalidLhsOptionalChaining, {
+            at: expression,
+            ancestor,
+          });
+        }
+      }
+
+      if (binding !== BindingFlag.TYPE_NONE) {
         this.raise(Errors.InvalidPropertyBindingPattern, { at: expression });
       }
       return;
@@ -641,7 +658,9 @@ export default abstract class LValParser extends NodeUtils {
     if (validity === true) return;
     if (validity === false) {
       const ParseErrorClass =
-        binding === BIND_NONE ? Errors.InvalidLhs : Errors.InvalidLhsBinding;
+        binding === BindingFlag.TYPE_NONE
+          ? Errors.InvalidLhs
+          : Errors.InvalidLhsBinding;
 
       this.raise(ParseErrorClass, { at: expression, ancestor });
       return;
@@ -651,9 +670,7 @@ export default abstract class LValParser extends NodeUtils {
       ? validity
       : [validity, type === "ParenthesizedExpression"];
     const nextAncestor =
-      type === "ArrayPattern" ||
-      type === "ObjectPattern" ||
-      type === "ParenthesizedExpression"
+      type === "ArrayPattern" || type === "ObjectPattern"
         ? ({ type } as const)
         : ancestor;
 
@@ -682,7 +699,7 @@ export default abstract class LValParser extends NodeUtils {
         ? isStrictBindReservedWord(at.name, this.inModule)
         : isStrictBindOnlyReservedWord(at.name))
     ) {
-      if (bindingType === BIND_NONE) {
+      if (bindingType === BindingFlag.TYPE_NONE) {
         this.raise(Errors.StrictEvalArguments, { at, referenceName: at.name });
       } else {
         this.raise(Errors.StrictEvalArgumentsBinding, {
@@ -692,11 +709,11 @@ export default abstract class LValParser extends NodeUtils {
       }
     }
 
-    if (bindingType & BIND_FLAGS_NO_LET_IN_LEXICAL && at.name === "let") {
+    if (bindingType & BindingFlag.FLAG_NO_LET_IN_LEXICAL && at.name === "let") {
       this.raise(Errors.LetInLexicalBinding, { at });
     }
 
-    if (!(bindingType & BIND_NONE)) {
+    if (!(bindingType & BindingFlag.TYPE_NONE)) {
       this.declareNameFromIdentifier(at, bindingType);
     }
   }
@@ -723,7 +740,7 @@ export default abstract class LValParser extends NodeUtils {
   }
 
   checkCommaAfterRest(
-    close: typeof charCodes[keyof typeof charCodes],
+    close: (typeof charCodes)[keyof typeof charCodes],
   ): boolean {
     if (!this.match(tt.comma)) {
       return false;

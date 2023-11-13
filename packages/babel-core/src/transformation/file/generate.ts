@@ -1,17 +1,17 @@
-import type { PluginPasses } from "../../config";
+import type { PluginPasses } from "../../config/index.ts";
 import convertSourceMap from "convert-source-map";
-type SourceMap = any;
+import type { GeneratorResult } from "@babel/generator";
 import generate from "@babel/generator";
 
-import type File from "./file";
-import mergeSourceMap from "./merge-map";
+import type File from "./file.ts";
+import mergeSourceMap from "./merge-map.ts";
 
 export default function generateCode(
   pluginPasses: PluginPasses,
   file: File,
 ): {
   outputCode: string;
-  outputMap: SourceMap | null;
+  outputMap: GeneratorResult["map"] | null;
 } {
   const { opts, ast, code, inputMap } = file;
   const { generatorOpts } = opts;

@@ -3,10 +3,14 @@ import corejs2Polyfills from "@babel/compat-data/corejs2-built-ins";
 // @ts-expect-error Fixme: TS can not infer types from ../data/core-js-compat.js
 // but we can't import core-js-compat/data.json because JSON imports do
 // not work on Node 14
-import corejs3Polyfills from "../data/core-js-compat";
-import { plugins as pluginsList } from "./plugins-compat-data";
-import moduleTransformations from "./module-transformations";
-import { TopLevelOptions, ModulesOption, UseBuiltInsOption } from "./options";
+import corejs3Polyfills from "../data/core-js-compat.js";
+import { plugins as pluginsList } from "./plugins-compat-data.ts";
+import moduleTransformations from "./module-transformations.ts";
+import {
+  TopLevelOptions,
+  ModulesOption,
+  UseBuiltInsOption,
+} from "./options.ts";
 import { OptionValidator } from "@babel/helper-validator-option";
 
 const corejs2DefaultWebIncludes = [
@@ -21,9 +25,7 @@ import type {
   ModuleOption,
   Options,
   PluginListOption,
-} from "./types";
-
-declare const PACKAGE_JSON: { name: string; version: string };
+} from "./types.ts";
 
 const v = new OptionValidator(PACKAGE_JSON.name);
 
@@ -40,18 +42,23 @@ const modulePlugins = [
 const getValidIncludesAndExcludes = (
   type: "include" | "exclude",
   corejs: number | false,
-) =>
-  Array.from(
-    new Set([
-      ...allPluginsList,
-      ...(type === "exclude" ? modulePlugins : []),
-      ...(corejs
-        ? corejs == 2
-          ? [...Object.keys(corejs2Polyfills), ...corejs2DefaultWebIncludes]
-          : Object.keys(corejs3Polyfills)
-        : []),
-    ]),
-  );
+) => {
+  const set = new Set(allPluginsList);
+  if (type === "exclude") modulePlugins.map(set.add, set);
+  if (corejs) {
+    if (process.env.BABEL_8_BREAKING) {
+      Object.keys(corejs3Polyfills).map(set.add, set);
+    } else {
+      if (corejs === 2) {
+        Object.keys(corejs2Polyfills).map(set.add, set);
+        corejs2DefaultWebIncludes.map(set.add, set);
+      } else {
+        Object.keys(corejs3Polyfills).map(set.add, set);
+      }
+    }
+  }
+  return Array.from(set);
+};
 
 function flatMap<T, U>(array: Array<T>, fn: (item: T) => Array<U>): Array<U> {
   return Array.prototype.concat.apply([], array.map(fn));
@@ -82,14 +89,14 @@ const expandIncludesAndExcludes = (
     } else {
       re = filter;
     }
-    const items = filterableItems.filter(
-      item =>
-        re.test(item) ||
-        // For backwards compatibility, we also support matching against the
-        // proposal- name.
-        // TODO(Babel 8): Remove this.
-        re.test(item.replace(/^transform-/, "proposal-")),
-    );
+    const items = filterableItems.filter(item => {
+      return process.env.BABEL_8_BREAKING
+        ? re.test(item)
+        : re.test(item) ||
+            // For backwards compatibility, we also support matching against the
+            // proposal- name.
+            re.test(item.replace(/^transform-/, "proposal-"));
+    });
     if (items.length === 0) invalidFilters.push(filter);
     return items;
   });
@@ -175,22 +182,29 @@ export function normalizeCoreJSOption(
   let rawVersion;
 
   if (useBuiltIns && corejs === undefined) {
-    rawVersion = 2;
-    console.warn(
-      "\nWARNING (@babel/preset-env): We noticed you're using the `useBuiltIns` option without declaring a " +
-        "core-js version. Currently, we assume version 2.x when no version " +
-        "is passed. Since this default version will likely change in future " +
-        "versions of Babel, we recommend explicitly setting the core-js version " +
-        "you are using via the `corejs` option.\n" +
-        "\nYou should also be sure that the version you pass to the `corejs` " +
-        "option matches the version specified in your `package.json`'s " +
-        "`dependencies` section. If it doesn't, you need to run one of the " +
-        "following commands:\n\n" +
-        "  npm install --save core-js@2    npm install --save core-js@3\n" +
-        "  yarn add core-js@2              yarn add core-js@3\n\n" +
-        "More info about useBuiltIns: https://babeljs.io/docs/en/babel-preset-env#usebuiltins\n" +
-        "More info about core-js: https://babeljs.io/docs/en/babel-preset-env#corejs",
-    );
+    if (process.env.BABEL_8_BREAKING) {
+      throw new Error(
+        "When using the `useBuiltIns` option you must specify" +
+          ' the code-js version you are using, such as `"corejs": "3.32.0"`.',
+      );
+    } else {
+      rawVersion = 2;
+      console.warn(
+        "\nWARNING (@babel/preset-env): We noticed you're using the `useBuiltIns` option without declaring a " +
+          `core-js version. Currently, we assume version 2.x when no version ` +
+          "is passed. Since this default version will likely change in future " +
+          "versions of Babel, we recommend explicitly setting the core-js version " +
+          "you are using via the `corejs` option.\n" +
+          "\nYou should also be sure that the version you pass to the `corejs` " +
+          "option matches the version specified in your `package.json`'s " +
+          "`dependencies` section. If it doesn't, you need to run one of the " +
+          "following commands:\n\n" +
+          "  npm install --save core-js@2    npm install --save core-js@3\n" +
+          "  yarn add core-js@2              yarn add core-js@3\n\n" +
+          "More info about useBuiltIns: https://babeljs.io/docs/en/babel-preset-env#usebuiltins\n" +
+          "More info about core-js: https://babeljs.io/docs/en/babel-preset-env#corejs",
+      );
+    }
   } else if (typeof corejs === "object" && corejs !== null) {
     rawVersion = corejs.version;
     proposals = Boolean(corejs.proposals);
@@ -200,17 +214,28 @@ export function normalizeCoreJSOption(
 
   const version = rawVersion ? semver.coerce(String(rawVersion)) : false;
 
-  if (!useBuiltIns && version) {
-    console.warn(
-      "\nWARNING (@babel/preset-env): The `corejs` option only has an effect when the `useBuiltIns` option is not `false`\n",
-    );
-  }
-
-  if (useBuiltIns && (!version || version.major < 2 || version.major > 3)) {
-    throw new RangeError(
-      "Invalid Option: The version passed to `corejs` is invalid. Currently, " +
-        "only core-js@2 and core-js@3 are supported.",
-    );
+  if (version) {
+    if (useBuiltIns) {
+      if (process.env.BABEL_8_BREAKING) {
+        if (version.major !== 3) {
+          throw new RangeError(
+            "Invalid Option: The version passed to `corejs` is invalid. Currently, " +
+              "only core-js@3 is supported.",
+          );
+        }
+      } else {
+        if (version.major < 2 || version.major > 3) {
+          throw new RangeError(
+            "Invalid Option: The version passed to `corejs` is invalid. Currently, " +
+              "only core-js@2 and core-js@3 are supported.",
+          );
+        }
+      }
+    } else {
+      console.warn(
+        "\nWARNING (@babel/preset-env): The `corejs` option only has an effect when the `useBuiltIns` option is not `false`\n",
+      );
+    }
   }
 
   return { version, proposals };

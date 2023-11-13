@@ -5,7 +5,7 @@ import nameFunction from "@babel/helper-function-name";
 import splitExportDeclaration from "@babel/helper-split-export-declaration";
 import { types as t } from "@babel/core";
 import globals from "globals";
-import transformClass from "./transformClass";
+import transformClass from "./transformClass.ts";
 
 const getBuiltinClasses = (category: keyof typeof globals) =>
   Object.keys(globals[category]).filter(name => /^[A-Z]/.test(name));
@@ -20,7 +20,11 @@ export interface Options {
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   const { loose = false } = options;
 

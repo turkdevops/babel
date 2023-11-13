@@ -1,29 +1,32 @@
-import { type Position } from "../util/location";
+import type { Position } from "../util/location.ts";
 import {
   tokenIsLiteralPropertyName,
   tt,
   type TokenType,
-} from "../tokenizer/types";
-import Tokenizer from "../tokenizer";
-import type State from "../tokenizer/state";
-import type { EstreePropertyDefinition, Node, ObjectProperty } from "../types";
-import { lineBreak, skipWhiteSpaceToLineBreak } from "../util/whitespace";
-import { isIdentifierChar } from "../util/identifier";
-import ClassScopeHandler from "../util/class-scope";
-import ExpressionScopeHandler from "../util/expression-scope";
-import { SCOPE_PROGRAM } from "../util/scopeflags";
+} from "../tokenizer/types.ts";
+import Tokenizer from "../tokenizer/index.ts";
+import type State from "../tokenizer/state.ts";
+import type {
+  EstreePropertyDefinition,
+  Node,
+  ObjectProperty,
+} from "../types.ts";
+import { lineBreak, skipWhiteSpaceToLineBreak } from "../util/whitespace.ts";
+import { isIdentifierChar } from "../util/identifier.ts";
+import ClassScopeHandler from "../util/class-scope.ts";
+import ExpressionScopeHandler from "../util/expression-scope.ts";
+import { ScopeFlag } from "../util/scopeflags.ts";
 import ProductionParameterHandler, {
-  PARAM_AWAIT,
-  PARAM,
-} from "../util/production-parameter";
+  ParamKind,
+} from "../util/production-parameter.ts";
 import {
   Errors,
   type ParseError,
   type ParseErrorConstructor,
-} from "../parse-error";
-import type Parser from ".";
+} from "../parse-error.ts";
+import type Parser from "./index.ts";
 
-import type ScopeHandler from "../util/scope";
+import type ScopeHandler from "../util/scope.ts";
 
 type TryParse<Node, Error, Thrown, Aborted, FailState> = {
   node: Node;
@@ -101,7 +104,7 @@ export default abstract class UtilParser extends Tokenizer {
       if (toParseError != null) {
         throw this.raise(toParseError, { at: this.state.startLoc });
       }
-      throw this.unexpected(null, token);
+      this.unexpected(null, token);
     }
   }
 
@@ -343,11 +346,11 @@ export default abstract class UtilParser extends Tokenizer {
   }
 
   enterInitialScopes() {
-    let paramFlags = PARAM;
+    let paramFlags = ParamKind.PARAM;
     if (this.inModule) {
-      paramFlags |= PARAM_AWAIT;
+      paramFlags |= ParamKind.PARAM_AWAIT;
     }
-    this.scope.enter(SCOPE_PROGRAM);
+    this.scope.enter(ScopeFlag.PROGRAM);
     this.prodParam.enter(paramFlags);
   }
 

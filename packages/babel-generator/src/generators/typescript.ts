@@ -1,4 +1,4 @@
-import type Printer from "../printer";
+import type Printer from "../printer.ts";
 import type * as t from "@babel/types";
 import type { NodePath } from "@babel/traverse";
 
@@ -317,9 +317,7 @@ function tsPrintBraced(printer: Printer, members: t.Node[], node: t.Node) {
     printer.dedent();
   }
 
-  printer.sourceWithOffset("end", node.loc, 0, -1);
-
-  printer.rightBrace();
+  printer.rightBrace(node);
 }
 
 export function TSArrayType(this: Printer, node: t.TSArrayType) {

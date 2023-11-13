@@ -1,4 +1,4 @@
-import type Printer from "../printer";
+import type Printer from "../printer.ts";
 import {
   isExportDefaultDeclaration,
   isExportNamedDeclaration,
@@ -72,15 +72,11 @@ export function ClassBody(this: Printer, node: t.ClassBody) {
   } else {
     this.newline();
 
-    this.indent();
-    this.printSequence(node.body, node);
-    this.dedent();
+    this.printSequence(node.body, node, { indent: true });
 
     if (!this.endsWith(charCodes.lineFeed)) this.newline();
 
-    this.sourceWithOffset("end", node.loc, 0, -1);
-
-    this.rightBrace();
+    this.rightBrace(node);
   }
 }
 
@@ -224,9 +220,6 @@ export function StaticBlock(this: Printer, node: t.StaticBlock) {
     this.printSequence(node.body, node, {
       indent: true,
     });
-
-    this.sourceWithOffset("end", node.loc, 0, -1);
-
-    this.rightBrace();
+    this.rightBrace(node);
   }
 }

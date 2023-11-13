@@ -13,7 +13,11 @@ interface VisitorState {
   targetScope: Scope;
 }
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   const { allowMutablePropsOnTags } = options;
 
@@ -92,14 +96,18 @@ export default declare((api, options: Options) => {
         path.skip();
       };
 
-      if (path.isJSXClosingElement()) return skip();
+      if (path.isJSXClosingElement()) {
+        skip();
+        return;
+      }
 
       // Elements with refs are not safe to hoist.
       if (
         path.isJSXIdentifier({ name: "ref" }) &&
         path.parentPath.isJSXAttribute({ name: path.node })
       ) {
-        return stop();
+        stop();
+        return;
       }
 
       // Ignore JSX expressions and immutable values.
@@ -123,10 +131,14 @@ export default declare((api, options: Options) => {
       const { mutablePropsAllowed } = state;
       if (mutablePropsAllowed && path.isFunction()) {
         path.traverse(targetScopeVisitor, state);
-        return skip();
+        skip();
+        return;
       }
 
-      if (!path.isPure()) return stop();
+      if (!path.isPure()) {
+        stop();
+        return;
+      }
 
       // If it's not immutable, it may still be a pure expression, such as string concatenation.
       // It is still safe to hoist that, so long as its result is immutable.
@@ -142,9 +154,10 @@ export default declare((api, options: Options) => {
           (typeof value !== "object" && typeof value !== "function")
         ) {
           // It evaluated to an immutable value, so we can hoist it.
-          return skip();
+          skip();
+          return;
         }
-      } else if (t.isIdentifier(expressionResult.deopt)) {
+      } else if (expressionResult.deopt?.isIdentifier()) {
         // It's safe to hoist here if the deopt reason is an identifier (e.g. func param).
         // The hoister will take care of how high up it can be hoisted.
         return;

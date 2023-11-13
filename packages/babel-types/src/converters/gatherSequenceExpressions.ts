@@ -1,4 +1,11 @@
-import getBindingIdentifiers from "../retrievers/getBindingIdentifiers";
+// TODO(Babel 8) Remove this file
+if (process.env.BABEL_8_BREAKING) {
+  throw new Error(
+    "Internal Babel error: This file should only be loaded in Babel 7",
+  );
+}
+
+import getBindingIdentifiers from "../retrievers/getBindingIdentifiers.ts";
 import {
   isExpression,
   isExpressionStatement,
@@ -6,14 +13,14 @@ import {
   isIfStatement,
   isBlockStatement,
   isEmptyStatement,
-} from "../validators/generated";
+} from "../validators/generated/index.ts";
 import {
   sequenceExpression,
   assignmentExpression,
   conditionalExpression,
-} from "../builders/generated";
-import cloneNode from "../clone/cloneNode";
-import type * as t from "..";
+} from "../builders/generated/index.ts";
+import cloneNode from "../clone/cloneNode.ts";
+import type * as t from "../index.ts";
 import type { Scope } from "@babel/traverse";
 
 export type DeclarationInfo = {

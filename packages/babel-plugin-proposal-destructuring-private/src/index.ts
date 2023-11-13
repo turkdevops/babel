@@ -5,7 +5,7 @@ import {
   hasPrivateClassElement,
   transformPrivateKeyDestructuring,
   buildVariableDeclarationFromParams,
-} from "./util";
+} from "./util.ts";
 import { convertFunctionParams } from "@babel/plugin-transform-parameters";
 import { unshiftForXStatementBody } from "@babel/plugin-transform-destructuring";
 
@@ -14,7 +14,11 @@ import type { NodePath, Visitor } from "@babel/traverse";
 import type * as t from "@babel/types";
 
 export default declare(function ({ assertVersion, assumption, types: t }) {
-  assertVersion("^7.17.0");
+  assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : "^7.17.0",
+  );
   const {
     assignmentExpression,
     assignmentPattern,

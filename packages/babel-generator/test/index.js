@@ -1,13 +1,16 @@
-import { parse } from "@babel/parser";
+import { parse, parseExpression } from "@babel/parser";
 import * as t from "@babel/types";
 import fs from "fs";
 import path from "path";
 import fixtures from "@babel/helper-fixtures";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
-import { fileURLToPath } from "url";
+import { commonJS } from "$repo-utils";
+import { encode } from "@jridgewell/sourcemap-codec";
 
 import _generate, { CodeGenerator } from "../lib/index.js";
 const generate = _generate.default || _generate;
+
+const { __dirname } = commonJS(import.meta.url);
 
 describe("generation", function () {
   it("multiple sources", function () {
@@ -914,6 +917,61 @@ describe("generation", function () {
       }
     `);
   });
+
+  it("should not throw when loc.column === 0 with inputSourceMap", () => {
+    const ast = parseExpression("a(\n)");
+
+    ast.loc.end.column = 0;
+
+    expect(
+      generate(ast, {
+        sourceMaps: true,
+        inputSourceMap: {
+          version: 3,
+          names: [],
+          sources: ["input.js"],
+          // [ generatedCodeColumn, sourceIndex, sourceCodeLine, sourceCodeColumn, nameIndex ]
+          mappings: encode([[0, 0, 1, 0]]),
+        },
+      }).rawMappings,
+    ).toMatchInlineSnapshot(`
+      Array [
+        Object {
+          "generated": Object {
+            "column": 0,
+            "line": 1,
+          },
+          "name": "a",
+          "original": Object {
+            "column": 0,
+            "line": 1,
+          },
+          "source": "input.js",
+        },
+        Object {
+          "generated": Object {
+            "column": 1,
+            "line": 1,
+          },
+          "name": undefined,
+          "original": Object {
+            "column": 0,
+            "line": 1,
+          },
+          "source": "input.js",
+        },
+        Object {
+          "generated": Object {
+            "column": 2,
+            "line": 1,
+          },
+          "name": undefined,
+          "original": undefined,
+          "source": undefined,
+        },
+      ]
+    `);
+  });
 });
 
 describe("programmatic generation", function () {
@@ -1045,6 +1103,28 @@ describe("programmatic generation", function () {
     );
     const output = generate(functionTypeAnnotation).code;
     expect(output).toBe("() => void");
+  });
+
+  it("generate a child node with retainLines", () => {
+    const node = parse("a;\n\nexpect(a).toMatchInlineSnapshot(`[1, 2]`\n);")
+      .program.body[1].expression;
+
+    expect(node.type).toBe("CallExpression");
+
+    expect(generate(node, { retainLines: true }).code).toMatchInlineSnapshot(`
+      "
+
+      expect(a).toMatchInlineSnapshot(\`[1, 2]\`
+      )"
+    `);
+
+    node.loc.end.line = node.loc.start.line;
+
+    expect(generate(node, { retainLines: true }).code).toMatchInlineSnapshot(`
+      "
+
+      expect(a).toMatchInlineSnapshot(\`[1, 2]\`)"
+    `);
   });
 
   describe("directives", function () {
@@ -1413,9 +1493,11 @@ describe("CodeGenerator", function () {
   });
 });
 
-const suites = (fixtures.default || fixtures)(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures"),
-);
+const suites = (fixtures.default || fixtures)(path.join(__dirname, "fixtures"));
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 suites.forEach(function (testSuite) {
   describe("generation/" + testSuite.title, function () {
@@ -1441,10 +1523,7 @@ suites.forEach(function (testSuite) {
             };
             const actualAst = parse(actualCode, parserOpts);
             const options = {
-              sourceFileName: path.relative(
-                path.dirname(fileURLToPath(import.meta.url)),
-                actual.loc,
-              ),
+              sourceFileName: path.relative(__dirname, actual.loc),
               ...task.options,
               sourceMaps: task.sourceMap ? true : task.options.sourceMaps,
             };
@@ -1459,7 +1538,20 @@ suites.forEach(function (testSuite) {
                 throwMsg === true ? undefined : throwMsg,
               );
             } else {
+              jest.spyOn(console, "warn").mockImplementation(() => {});
+
               const result = run();
+
+              if (
+                options.warns &&
+                (!process.env.IS_PUBLISH || !options.noWarnInPublishBuild)
+              ) {
+                expect(console.warn).toHaveBeenCalledWith(
+                  expect.stringContaining(options.warns),
+                );
+              } else {
+                expect(console.warn).not.toHaveBeenCalled();
+              }
 
               if (options.sourceMaps) {
                 try {

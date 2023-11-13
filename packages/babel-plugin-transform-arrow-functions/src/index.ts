@@ -5,7 +5,11 @@ export interface Options {
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   const noNewArrows = api.assumption("noNewArrows") ?? !options.spec;
 
@@ -18,15 +22,23 @@ export default declare((api, options: Options) => {
         // was queued up.
         if (!path.isArrowFunctionExpression()) return;
 
-        path.arrowFunctionToExpression({
-          // While other utils may be fine inserting other arrows to make more transforms possible,
-          // the arrow transform itself absolutely cannot insert new arrow functions.
-          allowInsertArrow: false,
-          noNewArrows,
+        if (process.env.BABEL_8_BREAKING) {
+          path.arrowFunctionToExpression({
+            // While other utils may be fine inserting other arrows to make more transforms possible,
+            // the arrow transform itself absolutely cannot insert new arrow functions.
+            allowInsertArrow: false,
+            noNewArrows,
+          });
+        } else {
+          path.arrowFunctionToExpression({
+            allowInsertArrow: false,
+            noNewArrows,
 
-          // TODO(Babel 8): This is only needed for backward compat with @babel/traverse <7.13.0
-          specCompliant: !noNewArrows,
-        });
+            // This is only needed for backward compat with @babel/traverse <7.13.0
+            // @ts-ignore(Babel 7 vs Babel 8) Removed in Babel 8
+            specCompliant: !noNewArrows,
+          });
+        }
       },
     },
   };

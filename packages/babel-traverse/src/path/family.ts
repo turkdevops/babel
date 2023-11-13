@@ -1,7 +1,7 @@
 // This file contains methods responsible for dealing with/retrieving children or siblings.
 
-import type TraversalContext from "../context";
-import NodePath from "./index";
+import type TraversalContext from "../context.ts";
+import NodePath from "./index.ts";
 import {
   getBindingIdentifiers as _getBindingIdentifiers,
   getOuterBindingIdentifiers as _getOuterBindingIdentifiers,
@@ -364,8 +364,8 @@ type Trav<
 type ToNodePath<T> = T extends Array<t.Node | null | undefined>
   ? Array<NodePath<T[number]>>
   : T extends t.Node | null | undefined
-  ? NodePath<T>
-  : never;
+    ? NodePath<T>
+    : never;
 
 function get<T extends t.Node, K extends keyof T>(
   this: NodePath<T>,
@@ -374,8 +374,8 @@ function get<T extends t.Node, K extends keyof T>(
 ): T[K] extends Array<t.Node | null | undefined>
   ? Array<NodePath<T[K][number]>>
   : T[K] extends t.Node | null | undefined
-  ? NodePath<T[K]>
-  : never;
+    ? NodePath<T[K]>
+    : never;
 
 function get<T extends t.Node, K extends string>(
   this: NodePath<T>,

@@ -13,11 +13,11 @@
     [
       "transform-runtime",
       {
-        "regenerator": false,
         "corejs": false,
         "helpers": true,
         "useESModules": true,
-        "absoluteRuntime": true
+        "absoluteRuntime": true,
+        "version": "7.100.0"
       }
     ]
   ],

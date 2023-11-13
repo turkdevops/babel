@@ -1,6 +1,6 @@
 {
   "name": "@babel/core",
-  "version": "7.21.0",
+  "version": "7.23.3",
   "description": "Babel compiler core.",
   "main": "./lib/index.js",
   "author": "The Babel Team (https://babel.dev/team)",
@@ -56,11 +56,11 @@
     "@babel/template": "workspace:^",
     "@babel/traverse": "workspace:^",
     "@babel/types": "workspace:^",
-    "convert-source-map": "^1.7.0",
+    "convert-source-map": "^2.0.0",
     "debug": "^4.1.0",
     "gensync": "^1.0.0-beta.2",
-    "json5": "^2.2.2",
-    "semver": "condition:BABEL_8_BREAKING ? ^7.3.4 : ^6.3.0"
+    "json5": "^2.2.3",
+    "semver": "condition:BABEL_8_BREAKING ? ^7.3.4 : ^6.3.1"
   },
   "devDependencies": {
     "@babel/helper-transform-fixture-test-runner": "workspace:^",
@@ -68,8 +68,9 @@
     "@babel/plugin-transform-flow-strip-types": "workspace:^",
     "@babel/plugin-transform-modules-commonjs": "workspace:^",
     "@babel/preset-env": "workspace:^",
+    "@babel/preset-typescript": "workspace:^",
     "@jridgewell/trace-mapping": "^0.3.17",
-    "@types/convert-source-map": "^1.5.1",
+    "@types/convert-source-map": "^2.0.0",
     "@types/debug": "^4.1.0",
     "@types/gensync": "^1.0.0",
     "@types/resolve": "^1.3.2",
@@ -79,7 +80,19 @@
   },
   "conditions": {
     "BABEL_8_BREAKING": [
-      null,
+      {
+        "peerDependencies": {
+          "@babel/preset-typescript": "^7.21.4 || ^8.0.0-0"
+        },
+        "peerDependenciesMeta": {
+          "@babel/preset-typescript": {
+            "optional": true
+          }
+        },
+        "engines": {
+          "node": "^16.20.0 || ^18.16.0 || >=20.0.0"
+        }
+      },
       {
         "exports": null
       }
@@ -99,7 +112,10 @@
     ]
   },
   "exports": {
-    ".": "./lib/index.js",
+    ".": {
+      "require": "./cjs-proxy-dev.cjs",
+      "default": "./lib/index.js"
+    },
     "./package.json": "./package.json"
   },
   "type": "commonjs"

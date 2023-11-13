@@ -3,7 +3,11 @@ import syntaxExportDefaultFrom from "@babel/plugin-syntax-export-default-from";
 import { types as t } from "@babel/core";
 
 export default declare(api => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   return {
     name: "proposal-export-default-from",
@@ -24,19 +28,13 @@ export default declare(api => {
           return;
         }
 
-        const nodes = [
+        path.insertBefore(
           t.exportNamedDeclaration(
             null,
             [t.exportSpecifier(t.identifier("default"), exported)],
             t.cloneNode(source),
           ),
-        ];
-
-        if (specifiers.length >= 1) {
-          nodes.push(node);
-        }
-
-        path.replaceWithMultiple(nodes);
+        );
       },
     },
   };

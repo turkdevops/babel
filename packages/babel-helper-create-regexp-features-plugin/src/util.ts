@@ -1,5 +1,5 @@
 import type { types as t } from "@babel/core";
-import { FEATURES, hasFeature } from "./features";
+import { FEATURES, hasFeature } from "./features.ts";
 
 import type { RegexpuOptions } from "regexpu-core";
 
@@ -33,9 +33,7 @@ export function generateRegexpuOptions(
 
   return {
     unicodeFlag: feat("unicodeFlag"),
-    unicodeSetsFlag:
-      feat<Experimental>("unicodeSetsFlag") ||
-      feat<Experimental>("unicodeSetsFlag_syntax", "parse"),
+    unicodeSetsFlag: feat<Experimental>("unicodeSetsFlag") || "parse",
     dotAllFlag: feat("dotAllFlag"),
     unicodePropertyEscapes: feat("unicodePropertyEscape"),
     namedGroups: feat("namedCaptureGroups") || featDuplicateNamedGroups(),

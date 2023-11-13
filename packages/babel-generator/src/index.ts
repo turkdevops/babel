@@ -1,13 +1,17 @@
-import SourceMap from "./source-map";
-import Printer from "./printer";
+import SourceMap from "./source-map.ts";
+import Printer from "./printer.ts";
 import type * as t from "@babel/types";
 import type { Opts as jsescOptions } from "jsesc";
-import type { Format } from "./printer";
+import type { Format } from "./printer.ts";
 import type {
   RecordAndTuplePluginOptions,
   PipelineOperatorPluginOptions,
 } from "@babel/parser";
-import type { DecodedSourceMap, Mapping } from "@jridgewell/gen-mapping";
+import type {
+  EncodedSourceMap,
+  DecodedSourceMap,
+  Mapping,
+} from "@jridgewell/gen-mapping";
 
 /**
  * Babel's code generator, turns an ast into code, maintaining sourcemaps,
@@ -71,13 +75,14 @@ function normalizeOptions(
       minimal: process.env.BABEL_8_BREAKING ? true : false,
       ...opts.jsescOption,
     },
-    recordAndTupleSyntaxType: opts.recordAndTupleSyntaxType,
+    recordAndTupleSyntaxType: opts.recordAndTupleSyntaxType ?? "hash",
     topicToken: opts.topicToken,
+    importAttributesKeyword: opts.importAttributesKeyword,
   };
 
   if (!process.env.BABEL_8_BREAKING) {
     format.decoratorsBeforeExport = opts.decoratorsBeforeExport;
-    format.jsonCompatibleStrings = opts.jsonCompatibleStrings;
+    format.jsescOption.json = opts.jsonCompatibleStrings;
   }
 
   if (format.minified) {
@@ -218,24 +223,25 @@ export interface GeneratorOptions {
    * For use with the recordAndTuple token.
    */
   recordAndTupleSyntaxType?: RecordAndTuplePluginOptions["syntaxType"];
+
   /**
    * For use with the Hack-style pipe operator.
    * Changes what token is used for pipe bodies’ topic references.
    */
   topicToken?: PipelineOperatorPluginOptions["topicToken"];
+
+  /**
+   * The import attributes syntax style:
+   * - "with"        : `import { a } from "b" with { type: "json" };`
+   * - "assert"      : `import { a } from "b" assert { type: "json" };`
+   * - "with-legacy" : `import { a } from "b" with type: "json";`
+   */
+  importAttributesKeyword?: "with" | "assert" | "with-legacy";
 }
 
 export interface GeneratorResult {
   code: string;
-  map: {
-    version: number;
-    sources: readonly string[];
-    names: readonly string[];
-    sourceRoot?: string;
-    sourcesContent?: readonly string[];
-    mappings: string;
-    file?: string;
-  } | null;
+  map: EncodedSourceMap | null;
   decodedMap: DecodedSourceMap | undefined;
   rawMappings: Mapping[] | undefined;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@babel/plugin-proposal-regexp-modifiers",
-  "version": "7.21.0",
+  "version": "7.23.3",
   "description": "Compile inline regular expression modifiers",
   "homepage": "https://babel.dev/docs/en/next/babel-plugin-proposal-regexp-modifiers",
   "license": "MIT",
@@ -40,6 +40,14 @@
         "type": "module"
       },
       null
+    ],
+    "BABEL_8_BREAKING": [
+      {
+        "engines": {
+          "node": "^16.20.0 || ^18.16.0 || >=20.0.0"
+        }
+      },
+      {}
     ]
   },
   "exports": {

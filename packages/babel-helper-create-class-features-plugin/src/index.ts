@@ -3,30 +3,29 @@ import type { PluginAPI, PluginObject } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import nameFunction from "@babel/helper-function-name";
 import splitExportDeclaration from "@babel/helper-split-export-declaration";
+
+import semver from "semver";
+
 import {
   buildPrivateNamesNodes,
   buildPrivateNamesMap,
   transformPrivateNamesUsage,
   buildFieldsInitNodes,
   buildCheckInRHS,
-} from "./fields";
-import type { PropPath } from "./fields";
-import { buildDecoratedClass, hasDecorators } from "./decorators";
-import { injectInitialization, extractComputedKeys } from "./misc";
-import { enableFeature, FEATURES, isLoose, shouldTransform } from "./features";
-import { assertFieldTransformed } from "./typescript";
+} from "./fields.ts";
+import type { PropPath } from "./fields.ts";
+import { buildDecoratedClass, hasDecorators } from "./decorators.ts";
+import { injectInitialization, extractComputedKeys } from "./misc.ts";
+import {
+  enableFeature,
+  FEATURES,
+  isLoose,
+  shouldTransform,
+} from "./features.ts";
+import { assertFieldTransformed } from "./typescript.ts";
 
 export { FEATURES, enableFeature, injectInitialization, buildCheckInRHS };
 
-declare const PACKAGE_JSON: { name: string; version: string };
-
-// Note: Versions are represented as an integer. e.g. 7.1.5 is represented
-//       as 70000100005. This method is easier than using a semver-parsing
-//       package, but it breaks if we release x.y.z where x, y or z are
-//       greater than 99_999.
-const version = PACKAGE_JSON.version
-  .split(".")
-  .reduce((v, x) => v * 1e5 + +x, 0);
 const versionKey = "@babel/plugin-class-features/version";
 
 interface Options {
@@ -43,10 +42,12 @@ export function createClassFeaturePlugin({
   feature,
   loose,
   manipulateOptions,
-  // @ts-ignore(Babel 7 vs Babel 8) TODO(Babel 8): Remove the default value
-  api = { assumption: () => void 0 },
+  api,
   inherits,
 }: Options): PluginObject {
+  if (!process.env.BABEL_8_BREAKING) {
+    api ??= { assumption: () => void 0 as any } as any;
+  }
   const setPublicClassFields = api.assumption("setPublicClassFields");
   const privateFieldsAsSymbols = api.assumption("privateFieldsAsSymbols");
   const privateFieldsAsProperties = api.assumption("privateFieldsAsProperties");
@@ -99,18 +100,32 @@ export function createClassFeaturePlugin({
     pre(file) {
       enableFeature(file, feature, loose);
 
-      if (!file.get(versionKey) || file.get(versionKey) < version) {
-        file.set(versionKey, version);
+      if (!process.env.BABEL_8_BREAKING) {
+        // Until 7.21.4, we used to encode the version as a number.
+        // If file.get(versionKey) is a number, it has thus been
+        // set by an older version of this plugin.
+        if (typeof file.get(versionKey) === "number") {
+          file.set(versionKey, PACKAGE_JSON.version);
+          return;
+        }
+      }
+      if (
+        !file.get(versionKey) ||
+        semver.lt(file.get(versionKey), PACKAGE_JSON.version)
+      ) {
+        file.set(versionKey, PACKAGE_JSON.version);
       }
     },
 
     visitor: {
       Class(path, { file }) {
-        if (file.get(versionKey) !== version) return;
+        if (file.get(versionKey) !== PACKAGE_JSON.version) return;
 
         if (!shouldTransform(path, file)) return;
 
-        if (path.isClassDeclaration()) assertFieldTransformed(path);
+        const pathIsClassDeclaration = path.isClassDeclaration();
+
+        if (pathIsClassDeclaration) assertFieldTransformed(path);
 
         const loose = isLoose(file, feature);
 
@@ -190,13 +205,12 @@ export function createClassFeaturePlugin({
         }
 
         const innerBinding = path.node.id;
-        let ref: t.Identifier;
-        if (!innerBinding || path.isClassExpression()) {
+        let ref: t.Identifier | null;
+        if (!innerBinding || !pathIsClassDeclaration) {
           nameFunction(path);
           ref = path.scope.generateUidIdentifier("class");
-        } else {
-          ref = t.cloneNode(path.node.id);
         }
+        const classRefForDefine = ref ?? t.cloneNode(innerBinding);
 
         // NODE: These three functions don't support decorators yet,
         //       but verifyUsedFeatures throws if there are both
@@ -210,7 +224,7 @@ export function createClassFeaturePlugin({
         );
 
         transformPrivateNamesUsage(
-          ref,
+          classRefForDefine,
           path,
           privateNamesMap,
           {
@@ -226,36 +240,27 @@ export function createClassFeaturePlugin({
           staticNodes: t.Statement[],
           instanceNodes: t.Statement[],
           pureStaticNodes: t.FunctionDeclaration[],
+          classBindingNode: t.Statement | null,
           wrapClass: (path: NodePath<t.Class>) => NodePath;
 
         if (!process.env.BABEL_8_BREAKING) {
           if (isDecorated) {
             staticNodes = pureStaticNodes = keysNodes = [];
             ({ instanceNodes, wrapClass } = buildDecoratedClass(
-              ref,
+              classRefForDefine,
               path,
               elements,
               file,
             ));
           } else {
             keysNodes = extractComputedKeys(path, computedPaths, file);
-            ({ staticNodes, pureStaticNodes, instanceNodes, wrapClass } =
-              buildFieldsInitNodes(
-                ref,
-                path.node.superClass,
-                props,
-                privateNamesMap,
-                file,
-                setPublicClassFields ?? loose,
-                privateFieldsAsSymbolsOrProperties ?? loose,
-                constantSuper ?? loose,
-                innerBinding,
-              ));
-          }
-        } else {
-          keysNodes = extractComputedKeys(path, computedPaths, file);
-          ({ staticNodes, pureStaticNodes, instanceNodes, wrapClass } =
-            buildFieldsInitNodes(
+            ({
+              staticNodes,
+              pureStaticNodes,
+              instanceNodes,
+              classBindingNode,
+              wrapClass,
+            } = buildFieldsInitNodes(
               ref,
               path.node.superClass,
               props,
@@ -266,6 +271,26 @@ export function createClassFeaturePlugin({
               constantSuper ?? loose,
               innerBinding,
             ));
+          }
+        } else {
+          keysNodes = extractComputedKeys(path, computedPaths, file);
+          ({
+            staticNodes,
+            pureStaticNodes,
+            instanceNodes,
+            classBindingNode,
+            wrapClass,
+          } = buildFieldsInitNodes(
+            ref,
+            path.node.superClass,
+            props,
+            privateNamesMap,
+            file,
+            setPublicClassFields ?? loose,
+            privateFieldsAsSymbolsOrProperties ?? loose,
+            constantSuper ?? loose,
+            innerBinding,
+          ));
         }
 
         if (instanceNodes.length > 0) {
@@ -297,11 +322,14 @@ export function createClassFeaturePlugin({
             .find(parent => parent.isStatement() || parent.isDeclaration())
             .insertAfter(pureStaticNodes);
         }
+        if (classBindingNode != null && pathIsClassDeclaration) {
+          wrappedPath.insertAfter(classBindingNode);
+        }
       },
 
       ExportDefaultDeclaration(path, { file }) {
         if (!process.env.BABEL_8_BREAKING) {
-          if (file.get(versionKey) !== version) return;
+          if (file.get(versionKey) !== PACKAGE_JSON.version) return;
 
           const decl = path.get("declaration");
 

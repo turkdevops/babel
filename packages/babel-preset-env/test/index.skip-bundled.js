@@ -1,37 +1,35 @@
 // eslint-disable-next-line import/extensions
 import compatData from "@babel/compat-data/plugins";
+import * as babel from "@babel/core";
+
+import { USE_ESM, itBabel7, itBabel8, describeBabel7NoESM } from "$repo-utils";
 
 import * as babelPresetEnv from "../lib/index.js";
 
-import _removeRegeneratorEntryPlugin from "../lib/polyfills/regenerator.js";
-import _pluginLegacyBabelPolyfill from "../lib/polyfills/babel-polyfill.js";
 import _transformations from "../lib/module-transformations.js";
 import _availablePlugins from "../lib/available-plugins.js";
-const removeRegeneratorEntryPlugin =
-  _removeRegeneratorEntryPlugin.default || _removeRegeneratorEntryPlugin;
-const pluginLegacyBabelPolyfill =
-  _pluginLegacyBabelPolyfill.default || _pluginLegacyBabelPolyfill;
 const transformations = _transformations.default || _transformations;
 const availablePlugins = _availablePlugins.default || _availablePlugins;
 
 // We need to load the correct plugins version (ESM or CJS),
 // because our tests rely on function identity.
-let pluginCoreJS2, pluginCoreJS3, pluginRegenerator;
-import _pluginCoreJS2_esm from "babel-plugin-polyfill-corejs2";
+let pluginCoreJS3;
 import _pluginCoreJS3_esm from "babel-plugin-polyfill-corejs3";
-import _pluginRegenerator_esm from "babel-plugin-polyfill-regenerator";
 import { createRequire } from "module";
-// eslint-disable-next-line @babel/development-internal/require-default-import-fallback
-if (/* commonjs */ _transformations.default) {
-  const require = createRequire(import.meta.url);
-
-  pluginCoreJS2 = require("babel-plugin-polyfill-corejs2").default;
-  pluginCoreJS3 = require("babel-plugin-polyfill-corejs3").default;
-  pluginRegenerator = require("babel-plugin-polyfill-regenerator").default;
-} else {
-  pluginCoreJS2 = _pluginCoreJS2_esm;
+const require = createRequire(import.meta.url);
+if (USE_ESM) {
   pluginCoreJS3 = _pluginCoreJS3_esm;
-  pluginRegenerator = _pluginRegenerator_esm;
+} else {
+  pluginCoreJS3 = require("babel-plugin-polyfill-corejs3").default;
+}
+if (!process.env.BABEL_8_BREAKING) {
+  // eslint-disable-next-line no-var
+  var {
+    pluginCoreJS2,
+    pluginRegenerator,
+    removeRegeneratorEntryPlugin,
+    legacyBabelPolyfillPlugin,
+  } = require("../lib/polyfills/babel-7-plugins.cjs");
 }
 
 describe("babel-preset-env", () => {
@@ -56,7 +54,7 @@ describe("babel-preset-env", () => {
       });
     });
   });
-  describe("getModulesPluginNames", () => {
+  describeBabel7NoESM("getModulesPluginNames", () => {
     describe("modules is set to false", () => {
       it("returns only syntax plugins", () => {
         expect(
@@ -67,7 +65,12 @@ describe("babel-preset-env", () => {
             shouldTransformDynamicImport: false,
             shouldTransformExportNamespaceFrom: false,
           }),
-        ).toEqual(["syntax-dynamic-import", "syntax-export-namespace-from"]);
+        ).toEqual([
+          "syntax-dynamic-import",
+          "syntax-export-namespace-from",
+          "syntax-top-level-await",
+          "syntax-import-meta",
+        ]);
       });
     });
     describe("modules is not set to false", () => {
@@ -81,57 +84,65 @@ describe("babel-preset-env", () => {
               shouldTransformDynamicImport: false,
               shouldTransformExportNamespaceFrom: false,
             }),
-          ).toEqual(["syntax-dynamic-import", "syntax-export-namespace-from"]);
+          ).toEqual([
+            "syntax-dynamic-import",
+            "syntax-export-namespace-from",
+            "syntax-top-level-await",
+            "syntax-import-meta",
+          ]);
         });
       });
       describe("ESMs should be transformed", () => {
         describe("dynamic imports should not be transformed", () => {
           it("returns specified modules transform and syntax-dynamic-import", () => {
-            expect(
-              babelPresetEnv.getModulesPluginNames({
-                modules: "commonjs",
-                transformations,
-                shouldTransformESM: true,
-                shouldTransformDynamicImport: false,
-                shouldTransformExportNamespaceFrom: false,
-              }),
-            ).toEqual([
+            const names = babelPresetEnv.getModulesPluginNames({
+              modules: "commonjs",
+              transformations,
+              shouldTransformESM: true,
+              shouldTransformDynamicImport: false,
+              shouldTransformExportNamespaceFrom: false,
+            });
+            expect(names).toEqual([
               "transform-modules-commonjs",
               "syntax-dynamic-import",
               "syntax-export-namespace-from",
+              "syntax-top-level-await",
+              "syntax-import-meta",
             ]);
           });
         });
         describe("dynamic imports should be transformed", () => {
           it("returns specified modules transform and transform-dynamic-import", () => {
-            expect(
-              babelPresetEnv.getModulesPluginNames({
-                modules: "systemjs",
-                transformations,
-                shouldTransformESM: true,
-                shouldTransformDynamicImport: true,
-                shouldTransformExportNamespaceFrom: false,
-              }),
-            ).toEqual([
+            const names = babelPresetEnv.getModulesPluginNames({
+              modules: "systemjs",
+              transformations,
+              shouldTransformESM: true,
+              shouldTransformDynamicImport: true,
+              shouldTransformExportNamespaceFrom: false,
+            });
+            expect(names).toEqual([
               "transform-modules-systemjs",
               "transform-dynamic-import",
               "syntax-export-namespace-from",
+              "syntax-top-level-await",
+              "syntax-import-meta",
             ]);
           });
           describe("export namespace from should be transformed", () => {
             it("works", () => {
-              expect(
-                babelPresetEnv.getModulesPluginNames({
-                  modules: "systemjs",
-                  transformations,
-                  shouldTransformESM: true,
-                  shouldTransformDynamicImport: true,
-                  shouldTransformExportNamespaceFrom: true,
-                }),
-              ).toEqual([
+              const names = babelPresetEnv.getModulesPluginNames({
+                modules: "systemjs",
+                transformations,
+                shouldTransformESM: true,
+                shouldTransformDynamicImport: true,
+                shouldTransformExportNamespaceFrom: true,
+              });
+              expect(names).toEqual([
                 "transform-modules-systemjs",
                 "transform-dynamic-import",
                 "transform-export-namespace-from",
+                "syntax-top-level-await",
+                "syntax-import-meta",
               ]);
             });
           });
@@ -139,7 +150,7 @@ describe("babel-preset-env", () => {
       });
     });
   });
-  describe("getPolyfillPlugins", () => {
+  describeBabel7NoESM("getPolyfillPlugins", () => {
     const staticProps = {
       polyfillTargets: [],
       include: new Set(),
@@ -196,10 +207,10 @@ describe("babel-preset-env", () => {
             );
             expect(polyfillPlugins.length).toBe(2);
             expect(polyfillPlugins[0][0]).toEqual(pluginCoreJS2);
-            expect(polyfillPlugins[1][0]).toEqual(pluginLegacyBabelPolyfill);
+            expect(polyfillPlugins[1][0]).toEqual(legacyBabelPolyfillPlugin);
           });
         });
-        describe("using corejs 3", () => {
+        describe("using corejs 3 (babel 7)", () => {
           describe("regenerator is set to false", () => {
             it("returns an array with core js 3 usage plugin", () => {
               const polyfillPlugins = babelPresetEnv.getPolyfillPlugins(
@@ -214,7 +225,7 @@ describe("babel-preset-env", () => {
               );
               expect(polyfillPlugins.length).toBe(2);
               expect(polyfillPlugins[0][0]).toEqual(pluginCoreJS3);
-              expect(polyfillPlugins[1][0]).toEqual(pluginLegacyBabelPolyfill);
+              expect(polyfillPlugins[1][0]).toEqual(legacyBabelPolyfillPlugin);
             });
           });
 
@@ -232,7 +243,7 @@ describe("babel-preset-env", () => {
               );
               expect(polyfillPlugins.length).toBe(3);
               expect(polyfillPlugins[0][0]).toEqual(pluginCoreJS3);
-              expect(polyfillPlugins[1][0]).toEqual(pluginLegacyBabelPolyfill);
+              expect(polyfillPlugins[1][0]).toEqual(legacyBabelPolyfillPlugin);
               expect(polyfillPlugins[2][0]).toEqual(pluginRegenerator);
             });
           });
@@ -252,7 +263,7 @@ describe("babel-preset-env", () => {
               ),
             );
             expect(polyfillPlugins.length).toBe(2);
-            expect(polyfillPlugins[0][0]).toEqual(pluginLegacyBabelPolyfill);
+            expect(polyfillPlugins[0][0]).toEqual(legacyBabelPolyfillPlugin);
             expect(polyfillPlugins[1][0]).toEqual(pluginCoreJS2);
           });
         });
@@ -271,7 +282,7 @@ describe("babel-preset-env", () => {
               );
               expect(polyfillPlugins.length).toBe(2);
               expect(polyfillPlugins[0][0]).toEqual(pluginCoreJS3);
-              expect(polyfillPlugins[1][0]).toEqual(pluginLegacyBabelPolyfill);
+              expect(polyfillPlugins[1][0]).toEqual(legacyBabelPolyfillPlugin);
             });
           });
 
@@ -289,7 +300,7 @@ describe("babel-preset-env", () => {
               );
               expect(polyfillPlugins.length).toBe(3);
               expect(polyfillPlugins[0][0]).toEqual(pluginCoreJS3);
-              expect(polyfillPlugins[1][0]).toEqual(pluginLegacyBabelPolyfill);
+              expect(polyfillPlugins[1][0]).toEqual(legacyBabelPolyfillPlugin);
               expect(polyfillPlugins[2][0]).toEqual(
                 removeRegeneratorEntryPlugin,
               );
@@ -308,5 +319,41 @@ describe("babel-preset-env", () => {
       .sort();
 
     expect(arrAvailablePlugins).toEqual(expect.arrayContaining(arrCompatData));
+  });
+
+  describe("debug", () => {
+    let log;
+    beforeEach(() => {
+      log = jest.spyOn(console, "log").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      log.mockRestore();
+    });
+
+    itBabel7(
+      "logs proposal- for packages that were proposals during the Babel 7 lifetime",
+      () => {
+        babel.transformSync("code", {
+          configFile: false,
+          browserslistConfigFile: false,
+          presets: [[babelPresetEnv.default, { debug: true }]],
+        });
+        expect(log).toHaveBeenCalledWith(expect.stringContaining("proposal-"));
+      },
+    );
+
+    itBabel8(
+      "logs transform- for packages that were proposals during the Babel 7 lifetime",
+      () => {
+        babel.transformSync("code", {
+          configFile: false,
+          browserslistConfigFile: false,
+          presets: [[babelPresetEnv.default, { debug: true }]],
+        });
+        expect(log).not.toHaveBeenCalledWith(
+          expect.stringContaining("proposal-"),
+        );
+      },
+    );
   });
 });

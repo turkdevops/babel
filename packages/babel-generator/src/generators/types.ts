@@ -1,13 +1,10 @@
-import type Printer from "../printer";
+import type Printer from "../printer.ts";
 import { isAssignmentPattern, isIdentifier } from "@babel/types";
 import type * as t from "@babel/types";
 import jsesc from "jsesc";
 
 export function Identifier(this: Printer, node: t.Identifier) {
-  this.sourceIdentifierName(
-    // @ts-expect-error Undocumented property identifierName
-    node.loc?.identifierName || node.name,
-  );
+  this.sourceIdentifierName(node.loc?.identifierName || node.name);
   this.word(node.name);
 }
 
@@ -33,7 +30,7 @@ export function ObjectExpression(this: Printer, node: t.ObjectExpression) {
     this.space();
   }
 
-  this.sourceWithOffset("end", node.loc, 0, -1);
+  this.sourceWithOffset("end", node.loc, -1);
 
   this.token("}");
 }
@@ -190,15 +187,16 @@ export function NullLiteral(this: Printer) {
 export function NumericLiteral(this: Printer, node: t.NumericLiteral) {
   const raw = this.getPossibleRaw(node);
   const opts = this.format.jsescOption;
-  const value = node.value + "";
+  const value = node.value;
+  const str = value + "";
   if (opts.numbers) {
-    this.number(jsesc(node.value, opts));
+    this.number(jsesc(value, opts), value);
   } else if (raw == null) {
-    this.number(value); // normalize
+    this.number(str, value); // normalize
   } else if (this.format.minified) {
-    this.number(raw.length < value.length ? raw : value);
+    this.number(raw.length < str.length ? raw : str, value);
   } else {
-    this.number(raw);
+    this.number(raw, value);
   }
 }
 
@@ -209,17 +207,9 @@ export function StringLiteral(this: Printer, node: t.StringLiteral) {
     return;
   }
 
-  const val = jsesc(
-    node.value,
-    process.env.BABEL_8_BREAKING
-      ? this.format.jsescOption
-      : Object.assign(
-          this.format.jsescOption,
-          this.format.jsonCompatibleStrings && { json: true },
-        ),
-  );
+  const val = jsesc(node.value, this.format.jsescOption);
 
-  return this.token(val);
+  this.token(val);
 }
 
 export function BigIntLiteral(this: Printer, node: t.BigIntLiteral) {

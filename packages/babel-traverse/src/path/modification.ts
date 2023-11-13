@@ -1,8 +1,8 @@
 // This file contains methods that modify the path/node in some ways.
 
-import { path as pathCache } from "../cache";
-import PathHoister from "./lib/hoister";
-import NodePath from "./index";
+import { getCachedPaths } from "../cache.ts";
+import PathHoister from "./lib/hoister.ts";
+import NodePath from "./index.ts";
 import {
   arrowFunctionExpression,
   assertExpression,
@@ -21,7 +21,7 @@ import {
   thisExpression,
 } from "@babel/types";
 import type * as t from "@babel/types";
-import type Scope from "../scope";
+import type Scope from "../scope/index.ts";
 
 /**
  * Insert the provided nodes before the current one.
@@ -97,7 +97,7 @@ export function _containerInsert<N extends t.Node>(
     const path = this.getSibling(to) as NodePath<N>;
     paths.push(path);
 
-    if (this.context && this.context.queue) {
+    if (this.context?.queue) {
       path.pushContext(this.context);
     }
   }
@@ -279,9 +279,10 @@ export function updateSiblingKeys(
 ) {
   if (!this.parent) return;
 
-  const paths = pathCache.get(this.parent);
+  const paths = getCachedPaths(this.hub, this.parent) || ([] as never[]);
+
   for (const [, path] of paths) {
-    if (path.key >= fromIndex) {
+    if (typeof path.key === "number" && path.key >= fromIndex) {
       path.key += incrementBy;
     }
   }

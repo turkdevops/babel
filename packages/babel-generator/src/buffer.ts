@@ -1,4 +1,4 @@
-import type SourceMap from "./source-map";
+import type SourceMap from "./source-map.ts";
 import * as charcodes from "charcodes";
 
 export type Pos = {
@@ -29,8 +29,13 @@ type QueueItem = {
 };
 
 export default class Buffer {
-  constructor(map?: SourceMap | null) {
+  constructor(map: SourceMap | null, indentChar: string) {
     this._map = map;
+    this._indentChar = indentChar;
+
+    for (let i = 0; i < 64; i++) {
+      this._fastIndentations.push(indentChar.repeat(i));
+    }
 
     this._allocQueue();
   }
@@ -43,6 +48,8 @@ export default class Buffer {
   _queue: QueueItem[] = [];
   _queueCursor = 0;
   _canMarkIdName = true;
+  _indentChar = "";
+  _fastIndentations: string[] = [];
 
   _position = {
     line: 1,
@@ -187,8 +194,9 @@ export default class Buffer {
   /**
    * Same as queue, but this indentation will never have a sourcemap marker.
    */
-  queueIndentation(char: number, repeat: number): void {
-    this._pushQueue(char, repeat, undefined, undefined, undefined);
+  queueIndentation(repeat: number): void {
+    if (repeat === 0) return;
+    this._pushQueue(-1, repeat, undefined, undefined, undefined);
   }
 
   _flush(): void {
@@ -208,10 +216,20 @@ export default class Buffer {
   ): void {
     this._last = char;
 
-    this._str +=
-      repeat > 1
-        ? String.fromCharCode(char).repeat(repeat)
-        : String.fromCharCode(char);
+    if (char === -1) {
+      const fastIndentation = this._fastIndentations[repeat];
+      if (fastIndentation !== undefined) {
+        this._str += fastIndentation;
+      } else {
+        this._str +=
+          repeat > 1 ? this._indentChar.repeat(repeat) : this._indentChar;
+      }
+    } else {
+      this._str +=
+        repeat > 1
+          ? String.fromCharCode(char).repeat(repeat)
+          : String.fromCharCode(char);
+    }
 
     if (char !== charcodes.lineFeed) {
       this._mark(
@@ -410,7 +428,10 @@ export default class Buffer {
    * over "();", where previously it would have been a single mapping.
    */
   exactSource(loc: Loc | undefined, cb: () => void) {
-    if (!this._map) return cb();
+    if (!this._map) {
+      cb();
+      return;
+    }
 
     this.source("start", loc);
     // @ts-expect-error identifierName is not defined
@@ -438,20 +459,19 @@ export default class Buffer {
   source(prop: "start" | "end", loc: Loc | undefined): void {
     if (!this._map) return;
 
-    // Since this is called extremely often, we re-use the same _sourcePosition
+    // Since this is called extremely often, we reuse the same _sourcePosition
     // object for the whole lifetime of the buffer.
-    this._normalizePosition(prop, loc, 0, 0);
+    this._normalizePosition(prop, loc, 0);
   }
 
   sourceWithOffset(
     prop: "start" | "end",
     loc: Loc | undefined,
-    lineOffset: number,
     columnOffset: number,
   ): void {
     if (!this._map) return;
 
-    this._normalizePosition(prop, loc, lineOffset, columnOffset);
+    this._normalizePosition(prop, loc, columnOffset);
   }
 
   /**
@@ -459,25 +479,21 @@ export default class Buffer {
    */
 
   withSource(prop: "start" | "end", loc: Loc, cb: () => void): void {
-    if (!this._map) return cb();
-
-    this.source(prop, loc);
+    if (this._map) {
+      this.source(prop, loc);
+    }
 
     cb();
   }
 
-  _normalizePosition(
-    prop: "start" | "end",
-    loc: Loc,
-    lineOffset: number,
-    columnOffset: number,
-  ) {
+  _normalizePosition(prop: "start" | "end", loc: Loc, columnOffset: number) {
     const pos = loc[prop];
     const target = this._sourcePosition;
 
     if (pos) {
-      target.line = pos.line + lineOffset;
-      target.column = pos.column + columnOffset;
+      target.line = pos.line;
+      // TODO: Fix https://github.com/babel/babel/issues/15712 in downstream
+      target.column = Math.max(pos.column + columnOffset, 0);
       target.filename = loc.filename;
     }
   }

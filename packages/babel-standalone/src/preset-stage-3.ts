@@ -1,4 +1,4 @@
-import * as babelPlugins from "./generated/plugins";
+import * as babelPlugins from "./generated/plugins.ts";
 
 export default (_: any, opts: any = {}) => {
   const {
@@ -10,7 +10,7 @@ export default (_: any, opts: any = {}) => {
 
   const plugins = [
     babelPlugins.syntaxImportAssertions,
-    babelPlugins.proposalUnicodeSetsRegex,
+    babelPlugins.transformUnicodeSetsRegex,
     babelPlugins.proposalDuplicateNamedCapturingGroupsRegex,
     [
       babelPlugins.proposalDecorators,
@@ -20,20 +20,21 @@ export default (_: any, opts: any = {}) => {
       },
     ],
     babelPlugins.proposalRegexpModifiers,
+    babelPlugins.proposalExplicitResourceManagement,
     // These are Stage 4
     ...(process.env.BABEL_8_BREAKING
       ? []
       : [
-          babelPlugins.proposalExportNamespaceFrom,
-          babelPlugins.proposalLogicalAssignmentOperators,
-          [babelPlugins.proposalOptionalChaining, { loose }],
-          [babelPlugins.proposalNullishCoalescingOperator, { loose }],
-          [babelPlugins.proposalClassProperties, { loose }],
-          babelPlugins.proposalJsonStrings,
-          babelPlugins.proposalNumericSeparator,
-          [babelPlugins.proposalPrivateMethods, { loose }],
-          babelPlugins.proposalPrivatePropertyInObject,
-          babelPlugins.proposalClassStaticBlock,
+          babelPlugins.transformExportNamespaceFrom,
+          babelPlugins.transformLogicalAssignmentOperators,
+          [babelPlugins.transformOptionalChaining, { loose }],
+          [babelPlugins.transformNullishCoalescingOperator, { loose }],
+          [babelPlugins.transformClassProperties, { loose }],
+          babelPlugins.transformJsonStrings,
+          babelPlugins.transformNumericSeparator,
+          [babelPlugins.transformPrivateMethods, { loose }],
+          babelPlugins.transformPrivatePropertyInObject,
+          babelPlugins.transformClassStaticBlock,
         ]),
   ];
 

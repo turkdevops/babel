@@ -8,24 +8,23 @@ Using targets:
 Using modules transform: auto
 
 Using plugins:
-  proposal-class-static-block { samsung < 17 }
-  proposal-private-property-in-object { samsung < 16 }
-  proposal-class-properties { samsung < 11 }
-  proposal-private-methods { samsung < 14 }
-  proposal-numeric-separator { samsung < 11 }
-  proposal-logical-assignment-operators { samsung < 14 }
-  proposal-nullish-coalescing-operator { samsung < 13 }
-  proposal-optional-chaining { samsung < 13 }
-  proposal-json-strings { samsung < 9 }
-  proposal-optional-catch-binding { samsung < 9 }
-  syntax-async-generators
-  syntax-object-rest-spread
-  proposal-unicode-property-regex { samsung < 9 }
+  transform-unicode-sets-regex { samsung }
+  transform-class-static-block { samsung < 17 }
+  transform-private-property-in-object { samsung < 16 }
+  transform-class-properties { samsung < 11 }
+  transform-private-methods { samsung < 14 }
+  transform-numeric-separator { samsung < 11 }
+  transform-logical-assignment-operators { samsung < 14 }
+  transform-nullish-coalescing-operator { samsung < 13 }
+  transform-optional-chaining { samsung < 13 }
+  transform-json-strings { samsung < 9 }
+  transform-optional-catch-binding { samsung < 9 }
+  transform-unicode-property-regex { samsung < 9 }
   transform-named-capturing-groups-regex { samsung < 9 }
-  proposal-export-namespace-from { samsung < 11.0 }
+  transform-export-namespace-from { samsung < 11.0 }
   transform-modules-commonjs
-  proposal-dynamic-import
-  syntax-import-assertions
+  transform-dynamic-import
+  syntax-import-attributes
 corejs3: `DEBUG` option
 
 Using targets: {
@@ -63,5 +62,3 @@ The corejs3 polyfill entry has been replaced with the following polyfills:
   web.url { "samsung":"8.2" }
   web.url.to-json { "samsung":"8.2" }
   web.url-search-params { "samsung":"8.2" }
-
-[<CWD>/packages/babel-preset-env/test/fixtures/debug/entry-corejs3-stable-samsung-8.2/input.mjs] Based on your targets, regenerator-runtime import excluded.

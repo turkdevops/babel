@@ -17,6 +17,14 @@
       },
       "type": "object"
     },
+    "ImportAttributesPluginOptions": {
+      "properties": {
+        "deprecatedAssertSyntax": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "PipelineOperatorPluginOptions": {
       "properties": {
         "proposal": {
@@ -60,6 +68,11 @@
       "description": "By default, exported identifiers must refer to a declared variable.\nSet this to true to allow export statements to reference undeclared variables.",
       "type": "boolean"
     },
+    "createImportExpressions": {
+      "description": "By default, `import(foo)` is parsed as `CallExpression(Import, [Identifier(foo)])`.\nSet this to true to parse it as an `ImportExpression` node.",
+      "type": "boolean",
+      "default": false
+    },
     "createParenthesizedExpressions": {
       "description": "By default, the parser adds information about parentheses by setting\n`extra.parenthesized` to `true` as needed.\nWhen this option is `true` the parser creates `ParenthesizedExpression`\nAST nodes instead of using the `extra` property.",
       "type": "boolean"
@@ -80,6 +93,19 @@
               },
               {
                 "$ref": "#/definitions/DecoratorsPluginOptions"
+              }
+            ],
+            "additionalItems": false,
+            "type": "array"
+          },
+          {
+            "items": [
+              {
+                "enum": ["importAttributes"],
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/ImportAttributesPluginOptions"
               }
             ],
             "additionalItems": false,
@@ -125,7 +151,25 @@
             "type": "array"
           },
           {
+            "items": [
+              {
+                "type": "string",
+                "enum": ["optionalChainingAssign"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string",
+                    "enum": ["2023-07"]
+                  }
+                }
+              }
+            ]
+          },
+          {
             "enum": [
+              "asyncDoExpressions",
               "asyncGenerators",
               "bigInt",
               "classPrivateMethods",
@@ -136,6 +180,7 @@
               "decorators",
               "decorators-legacy",
               "decoratorAutoAccessors",
+              "deferredImportEvaluation",
               "destructuringPrivate",
               "doExpressions",
               "dynamicImport",
@@ -148,6 +193,7 @@
               "functionBind",
               "functionSent",
               "importAssertions",
+              "importAttributes",
               "importMeta",
               "importReflection",
               "jsx",
@@ -164,6 +210,7 @@
               "placeholders",
               "privateIn",
               "regexpUnicodeSets",
+              "sourcePhaseImports",
               "throwExpressions",
               "topLevelAwait",
               "typescript",

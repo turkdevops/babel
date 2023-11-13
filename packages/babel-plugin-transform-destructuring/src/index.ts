@@ -6,8 +6,8 @@ import {
   convertAssignmentExpression,
   unshiftForXStatementBody,
   type DestructuringTransformerNode,
-} from "./util";
-export { buildObjectExcludingKeys, unshiftForXStatementBody } from "./util";
+} from "./util.ts";
+export { buildObjectExcludingKeys, unshiftForXStatementBody } from "./util.ts";
 import type { NodePath } from "@babel/traverse";
 
 /**
@@ -30,7 +30,11 @@ export interface Options {
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   const { useBuiltIns = false } = options;
 
@@ -158,7 +162,7 @@ export default declare((api, options: Options) => {
       AssignmentExpression(path, state) {
         if (!t.isPattern(path.node.left)) return;
         convertAssignmentExpression(
-          path,
+          path as NodePath<t.AssignmentExpression & { left: t.Pattern }>,
           name => state.addHelper(name),
           arrayLikeIsIterable,
           iterableIsArray,

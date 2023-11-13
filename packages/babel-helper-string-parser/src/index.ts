@@ -116,17 +116,16 @@ export function readStringContents(
       ++pos;
     }
   }
-  return {
-    pos,
-    str: out,
-    firstInvalidLoc,
-    lineStart,
-    curLine,
-
-    // TODO(Babel 8): This is only needed for backwards compatibility,
-    // we can remove it.
-    containsInvalid: !!firstInvalidLoc,
-  };
+  return process.env.BABEL_8_BREAKING
+    ? { pos, str: out, firstInvalidLoc, lineStart, curLine }
+    : {
+        pos,
+        str: out,
+        firstInvalidLoc,
+        lineStart,
+        curLine,
+        containsInvalid: !!firstInvalidLoc,
+      };
 }
 
 function isStringEnd(
@@ -339,10 +338,10 @@ export function readInt(
     radix === 16
       ? isAllowedNumericSeparatorSibling.hex
       : radix === 10
-      ? isAllowedNumericSeparatorSibling.dec
-      : radix === 8
-      ? isAllowedNumericSeparatorSibling.oct
-      : isAllowedNumericSeparatorSibling.bin;
+        ? isAllowedNumericSeparatorSibling.dec
+        : radix === 8
+          ? isAllowedNumericSeparatorSibling.oct
+          : isAllowedNumericSeparatorSibling.bin;
 
   let invalid = false;
   let total = 0;

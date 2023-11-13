@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Use Node.js latest
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "*"
           cache: "yarn"
@@ -32,10 +32,14 @@ jobs:
         env:
           BABEL_8_BREAKING: true
           USE_ESM: true
+      - name: Pack published packages
+        working-directory: /tmp
+        run: tar -cvf verdaccio-workspace.tar verdaccio-workspace
       - uses: actions/upload-artifact@v3
         with:
           name: verdaccio-workspace
-          path: /tmp/verdaccio-workspace
+          path: /tmp/verdaccio-workspace.tar
+          retention-days: 1
 
   e2e-tests:
     name: Test
@@ -44,16 +48,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # todo: verify which of these tests can be re-enabled
         project:
+          - babel
           - create-react-app
+          # - vue-cli
+          # - jest
+          # todo: Enable this test when metro-source-map does not reassign NodePath cache
+          # https://github.com/facebook/metro/blob/29bb5f2ad3319ba8f4764c3993aa85c15f59af23/packages/metro-source-map/src/generateFunctionMap.js#L182
+          # react-native
+          - prettier
+          # - angular-cli
     steps:
       - name: Get yarn1 cache directory path
         id: yarn1-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Use Node.js latest
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "*"
       - name: Get yarn3 cache directory path
@@ -80,7 +93,9 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: verdaccio-workspace
-          path: /tmp/verdaccio-workspace
+          path: /tmp
+      - name: Unpack published packages
+        run: tar -C /tmp -xf /tmp/verdaccio-workspace.tar
       - name: Test
         run: ./scripts/integration-tests/e2e-${{ matrix.project }}.sh
         env:

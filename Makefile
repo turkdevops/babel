@@ -1,5 +1,5 @@
 FLOW_COMMIT = 105ad30f566f401db9cafcb49cd2831fb29e87c5
-TEST262_COMMIT = d216cc197269fc41eb6eca14710529c3d6650535
+TEST262_COMMIT = 873f2604789e40f18e3e4dffd5a7bd6c4bed245f
 TYPESCRIPT_COMMIT = d87d0adcd30ac285393bf3bfbbb4d94d50c4f3c9
 
 SOURCES = packages codemods eslint
@@ -60,9 +60,10 @@ code-quality: tscheck lint
 tscheck:
 	$(MAKEJS) tscheck
 
-lint-ci: lint check-compat-data-ci
+lint-ci: lint check-compat-data
 
-check-compat-data-ci: check-compat-data
+generate-readme:
+	$(NODE) scripts/generators/readmes.js
 
 lint:
 	$(MAKEJS) lint
@@ -85,6 +86,9 @@ test: lint test-only
 
 clone-license:
 	$(MAKEJS) clone-license
+
+prepublish-prepare-dts:
+	$(MAKEJS) prepublish-prepare-dts
 
 prepublish-build:
 	$(MAKEJS) prepublish-build
@@ -174,20 +178,19 @@ test-test262-update-allowlist:
 
 
 new-version-checklist:
-	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	# @echo "!!!!!!                                                   !!!!!!"
-	# @echo "!!!!!!   Write any release-blocking message here, and    !!!!!!"
-	# @echo "!!!!!!              UNCOMMENT THESE LINES                !!!!!!"
-	# @echo "!!!!!!                                                   !!!!!!"
-	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	# @echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-	# @exit 1
+	$(MAKEJS) new-version-checklist
 
 new-version:
-	$(MAKE) new-version-checklist
-	git pull --rebase
-	$(YARN) release-tool version -f @babel/standalone
+	$(MAKEJS) new-version
+
+new-babel-8-version:
+	$(MAKEJS) new-babel-8-version
+
+new-babel-8-version-create-commit:
+	$(MAKEJS) new-babel-8-version-create-commit
+
+new-babel-8-version-create-commit-ci:
+	$(MAKEJS) new-babel-8-version-create-commit-ci
 
 # NOTE: Run make new-version first
 publish:
@@ -197,7 +200,11 @@ publish:
 		exit 1; \
 	fi
 	$(MAKE) prepublish
+ifeq ("$(BABEL_8_BREAKING)", "true")
+	USE_ESM=true $(YARN) release-tool publish --tag next
+else
 	$(YARN) release-tool publish
+endif
 	$(MAKE) clean
 
 publish-test:
@@ -206,7 +213,7 @@ ifneq ("$(I_AM_USING_VERDACCIO)", "I_AM_SURE")
 	exit 1
 endif
 	$(YARN) release-tool version $(VERSION) --all --yes --tag-version-prefix="version-e2e-test-"
-	$(MAKE) prepublish-build
+	$(MAKE) prepublish
 	node ./scripts/set-module-type.js clean
 	YARN_NPM_PUBLISH_REGISTRY=http://localhost:4873 $(YARN) release-tool publish --yes --tag-version-prefix="version-e2e-test-"
 	$(MAKE) clean

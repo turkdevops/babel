@@ -4,19 +4,18 @@ import buildDebug from "debug";
 import type { Handler } from "gensync";
 import { file, traverseFast } from "@babel/types";
 import type * as t from "@babel/types";
-import type { PluginPasses } from "../config";
+import type { PluginPasses } from "../config/index.ts";
 import convertSourceMap from "convert-source-map";
 import type { SourceMapConverter as Converter } from "convert-source-map";
-import File from "./file/file";
-import parser from "../parser";
-import cloneDeep from "./util/clone-deep";
+import File from "./file/file.ts";
+import parser from "../parser/index.ts";
+import cloneDeep from "./util/clone-deep.ts";
 
 const debug = buildDebug("babel:transform:file");
 
 // These regexps are copied from the convert-source-map package,
 // but without // or /* at the beginning of the comment.
 
-// eslint-disable-next-line max-len
 const INLINE_SOURCEMAP_REGEX =
   /^[@#]\s+sourceMappingURL=data:(?:application|text)\/json;(?:charset[:=]\S+?;)?base64,(?:.*)$/;
 const EXTERNAL_SOURCEMAP_REGEX =
@@ -63,9 +62,17 @@ export default function* normalizeFile(
       const lastComment = extractComments(INLINE_SOURCEMAP_REGEX, ast);
       if (lastComment) {
         try {
-          inputMap = convertSourceMap.fromComment(lastComment);
+          inputMap = convertSourceMap.fromComment("//" + lastComment);
         } catch (err) {
-          debug("discarding unknown inline input sourcemap", err);
+          if (process.env.BABEL_8_BREAKING) {
+            console.warn(
+              "discarding unknown inline input sourcemap",
+              options.filename,
+              err,
+            );
+          } else {
+            debug("discarding unknown inline input sourcemap");
+          }
         }
       }
     }

@@ -2,7 +2,7 @@ import { declare } from "@babel/helper-plugin-utils";
 import { template, types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 
-import transformWithoutHelper from "./no-helper-implementation";
+import transformWithoutHelper from "./no-helper-implementation.ts";
 
 export interface Options {
   allowArrayLike?: boolean;
@@ -33,7 +33,11 @@ function buildLoopBody(
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   {
     const { assumeArray, allowArrayLike, loose } = options;
@@ -50,11 +54,13 @@ export default declare((api, options: Options) => {
       );
     }
 
-    // TODO: Remove in Babel 8
-    if (allowArrayLike && /^7\.\d\./.test(api.version)) {
-      throw new Error(
-        `The allowArrayLike is only supported when using @babel/core@^7.10.0`,
-      );
+    if (!process.env.BABEL_8_BREAKING) {
+      // TODO: Remove in Babel 8
+      if (allowArrayLike && /^7\.\d\./.test(api.version)) {
+        throw new Error(
+          `The allowArrayLike is only supported when using @babel/core@^7.10.0`,
+        );
+      }
     }
   }
 
@@ -217,10 +223,12 @@ export default declare((api, options: Options) => {
           return;
         }
 
-        if (!state.availableHelper(builder.helper)) {
-          // Babel <7.9.0 doesn't support this helper
-          transformWithoutHelper(skipIteratorClosing, path, state);
-          return;
+        if (!process.env.BABEL_8_BREAKING) {
+          if (!state.availableHelper(builder.helper)) {
+            // Babel <7.9.0 doesn't support this helper
+            transformWithoutHelper(skipIteratorClosing, path, state);
+            return;
+          }
         }
 
         const { node, parent, scope } = path;

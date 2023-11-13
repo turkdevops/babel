@@ -1,15 +1,18 @@
-import { isAsync, waitFor } from "../../gensync-utils/async";
+import { isAsync, waitFor } from "../../gensync-utils/async.ts";
 import type { Handler } from "gensync";
 import path from "path";
 import { pathToFileURL } from "url";
 import { createRequire } from "module";
 import semver from "semver";
+import buildDebug from "debug";
 
-import { endHiddenCallStack } from "../../errors/rewrite-stack-trace";
-import ConfigError from "../../errors/config-error";
+import { endHiddenCallStack } from "../../errors/rewrite-stack-trace.ts";
+import ConfigError from "../../errors/config-error.ts";
 
-import type { InputOptions } from "..";
-import { transformFileSync } from "../../transform-file";
+import type { InputOptions } from "../index.ts";
+import { transformFileSync } from "../../transform-file.ts";
+
+const debug = buildDebug("babel:config:loading:files:module-types");
 
 const require = createRequire(import.meta.url);
 
@@ -29,19 +32,33 @@ export const supportsESM = semver.satisfies(
 export default function* loadCodeDefault(
   filepath: string,
   asyncError: string,
-  // TODO(Babel 8): Remove this
-  fallbackToTranspiledModule: boolean = false,
 ): Handler<unknown> {
   switch (path.extname(filepath)) {
     case ".cjs":
-      return loadCjsDefault(filepath, fallbackToTranspiledModule);
+      if (process.env.BABEL_8_BREAKING) {
+        return loadCjsDefault(filepath);
+      } else {
+        return loadCjsDefault(
+          filepath,
+          // @ts-ignore(Babel 7 vs Babel 8) Removed in Babel 8
+          /* fallbackToTranspiledModule */ arguments[2],
+        );
+      }
     case ".mjs":
       break;
     case ".cts":
       return loadCtsDefault(filepath);
     default:
       try {
-        return loadCjsDefault(filepath, fallbackToTranspiledModule);
+        if (process.env.BABEL_8_BREAKING) {
+          return loadCjsDefault(filepath);
+        } else {
+          return loadCjsDefault(
+            filepath,
+            // @ts-ignore(Babel 7 vs Babel 8) Removed in Babel 8
+            /* fallbackToTranspiledModule */ arguments[2],
+          );
+        }
       } catch (e) {
         if (e.code !== "ERR_REQUIRE_ESM") throw e;
       }
@@ -66,19 +83,18 @@ function loadCtsDefault(filepath: string) {
     const opts: InputOptions = {
       babelrc: false,
       configFile: false,
-      sourceType: "script",
+      sourceType: "unambiguous",
       sourceMaps: "inline",
+      sourceFileName: path.basename(filepath),
       presets: [
         [
           getTSPreset(filepath),
           {
-            disallowAmbiguousJSXLike: true,
-            allExtensions: true,
             onlyRemoveTypeImports: true,
             optimizeConstEnums: true,
-            ...(!process.env.BABEL_8_BREAKING && {
-              allowDeclareFields: true,
-            }),
+            ...(process.env.BABEL_8_BREAKING
+              ? {}
+              : { allowDeclareFields: true }),
           },
         ],
       ],
@@ -87,21 +103,33 @@ function loadCtsDefault(filepath: string) {
     handler = function (m, filename) {
       // If we want to support `.ts`, `.d.ts` must be handled specially.
       if (handler && filename.endsWith(ext)) {
-        // @ts-expect-error Undocumented API
-        return m._compile(
-          transformFileSync(filename, {
-            ...opts,
+        try {
+          // @ts-expect-error Undocumented API
+          return m._compile(
+            transformFileSync(filename, {
+              ...opts,
+              filename,
+            }).code,
             filename,
-          }).code,
-          filename,
-        );
+          );
+        } catch (error) {
+          if (!hasTsSupport) {
+            const packageJson = require("@babel/preset-typescript/package.json");
+            if (semver.lt(packageJson.version, "7.21.4")) {
+              console.error(
+                "`.cts` configuration file failed to load, please try to update `@babel/preset-typescript`.",
+              );
+            }
+          }
+          throw error;
+        }
       }
       return require.extensions[".js"](m, filename);
     };
     require.extensions[ext] = handler;
   }
   try {
-    return endHiddenCallStack(require)(filepath);
+    return loadCjsDefault(filepath);
   } finally {
     if (!hasTsSupport) {
       if (require.extensions[ext] === handler) delete require.extensions[ext];
@@ -110,12 +138,35 @@ function loadCtsDefault(filepath: string) {
   }
 }
 
-function loadCjsDefault(filepath: string, fallbackToTranspiledModule: boolean) {
-  const module = endHiddenCallStack(require)(filepath);
-  return module?.__esModule
-    ? // TODO (Babel 8): Remove "module" and "undefined" fallback
-      module.default || (fallbackToTranspiledModule ? module : undefined)
-    : module;
+const LOADING_CJS_FILES = new Set();
+
+function loadCjsDefault(filepath: string) {
+  // The `require()` call below can make this code reentrant if a require hook
+  // like @babel/register has been loaded into the system. That would cause
+  // Babel to attempt to compile the `.babelrc.js` file as it loads below. To
+  // cover this case, we auto-ignore re-entrant config processing. ESM loaders
+  // do not have this problem, because loaders do not apply to themselves.
+  if (LOADING_CJS_FILES.has(filepath)) {
+    debug("Auto-ignoring usage of config %o.", filepath);
+    return {};
+  }
+
+  let module;
+  try {
+    LOADING_CJS_FILES.add(filepath);
+    module = endHiddenCallStack(require)(filepath);
+  } finally {
+    LOADING_CJS_FILES.delete(filepath);
+  }
+
+  if (process.env.BABEL_8_BREAKING) {
+    return module?.__esModule ? module.default : module;
+  } else {
+    return module?.__esModule
+      ? module.default ||
+          /* fallbackToTranspiledModule */ (arguments[1] ? module : undefined)
+      : module;
+  }
 }
 
 async function loadMjsDefault(filepath: string) {
@@ -142,12 +193,11 @@ function getTSPreset(filepath: string) {
     let message =
       "You appear to be using a .cts file as Babel configuration, but the `@babel/preset-typescript` package was not found: please install it!";
 
-    if (process.versions.pnp) {
-      // Using Yarn PnP, which doesn't allow requiring packages that are not
-      // explicitly specified as dependencies.
-      // TODO(Babel 8): Explicitly add `@babel/preset-typescript` as an
-      // optional peer dependency of `@babel/core`.
-      message += `
+    if (!process.env.BABEL_8_BREAKING) {
+      if (process.versions.pnp) {
+        // Using Yarn PnP, which doesn't allow requiring packages that are not
+        // explicitly specified as dependencies.
+        message += `
 If you are using Yarn Plug'n'Play, you may also need to add the following configuration to your .yarnrc.yml file:
 
 packageExtensions:
@@ -155,6 +205,7 @@ packageExtensions:
 \t\tpeerDependencies:
 \t\t\t"@babel/preset-typescript": "*"
 `;
+      }
     }
 
     throw new ConfigError(message, filepath);

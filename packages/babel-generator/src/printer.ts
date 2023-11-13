@@ -1,6 +1,6 @@
-import Buffer, { type Pos } from "./buffer";
-import type { Loc } from "./buffer";
-import * as n from "./node";
+import Buffer, { type Pos } from "./buffer.ts";
+import type { Loc } from "./buffer.ts";
+import * as n from "./node/index.ts";
 import type * as t from "@babel/types";
 import {
   isFunction,
@@ -15,17 +15,16 @@ import type {
 } from "@babel/parser";
 import type { Opts as jsescOptions } from "jsesc";
 
-import * as generatorFunctions from "./generators";
-import type SourceMap from "./source-map";
+import * as generatorFunctions from "./generators/index.ts";
+import type SourceMap from "./source-map.ts";
 import * as charCodes from "charcodes";
-import { type TraceMap } from "@jridgewell/trace-mapping";
+import type { TraceMap } from "@jridgewell/trace-mapping";
 
 const SCIENTIFIC_NOTATION = /e/i;
 const ZERO_DECIMAL_INTEGER = /\.0+$/;
-const NON_DECIMAL_LITERAL = /^0[box]/;
 const PURE_ANNOTATION_RE = /^\s*[@#]__PURE__\s*$/;
 const HAS_NEWLINE = /[\n\r\u2028\u2029]/;
-const HAS_BlOCK_COMMENT_END = /\*\//;
+const HAS_NEWLINE_OR_BlOCK_COMMENT_END = /[\n\r\u2028\u2029]|\*\//;
 
 const { needsParens } = n;
 
@@ -64,6 +63,9 @@ export type Format = {
   };
   recordAndTupleSyntaxType: RecordAndTuplePluginOptions["syntaxType"];
   jsescOption: jsescOptions;
+  /**
+   * @deprecated Removed in Babel 8, use `jsescOption` instead
+   */
   jsonCompatibleStrings?: boolean;
   /**
    * For use with the Hack-style pipe operator.
@@ -74,6 +76,13 @@ export type Format = {
    * @deprecated Removed in Babel 8
    */
   decoratorsBeforeExport?: boolean;
+  /**
+   * The import attributes syntax style:
+   * - "with"        : `import { a } from "b" with { type: "json" };`
+   * - "assert"      : `import { a } from "b" assert { type: "json" };`
+   * - "with-legacy" : `import { a } from "b" with type: "json";`
+   */
+  importAttributesKeyword?: "with" | "assert" | "with-legacy";
 };
 
 interface AddNewlinesOptions {
@@ -98,12 +107,12 @@ export type PrintJoinOptions = PrintListOptions & PrintSequenceOptions;
 class Printer {
   constructor(format: Format, map: SourceMap) {
     this.format = format;
-    this._buf = new Buffer(map);
 
-    this._indentChar = format.indent.style.charCodeAt(0);
     this._indentRepeat = format.indent.style.length;
 
     this._inputMap = map?._inputMap;
+
+    this._buf = new Buffer(map, format.indent.style[0]);
   }
   declare _inputMap: TraceMap;
 
@@ -113,7 +122,6 @@ class Printer {
   declare _buf: Buffer;
   _printStack: Array<t.Node> = [];
   _indent: number = 0;
-  _indentChar: number = 0;
   _indentRepeat: number = 0;
   _insideAux: boolean = false;
   _parenPushNewlineState: { printed: boolean } | null = null;
@@ -171,11 +179,17 @@ class Printer {
    * Add a right brace to the buffer.
    */
 
-  rightBrace(): void {
+  rightBrace(node: t.Node): void {
     if (this.format.minified) {
       this._buf.removeLastSemicolon();
     }
+    this.sourceWithOffset("end", node.loc, -1);
     this.token("}");
+  }
+
+  rightParens(node: t.Node): void {
+    this.sourceWithOffset("end", node.loc, -1);
+    this.token(")");
   }
 
   /**
@@ -221,14 +235,26 @@ class Printer {
    * Writes a number token so that we can validate if it is an integer.
    */
 
-  number(str: string): void {
+  number(str: string, number?: number): void {
+    // const NON_DECIMAL_LITERAL = /^0[box]/;
+    function isNonDecimalLiteral(str: string) {
+      if (str.length > 2 && str.charCodeAt(0) === charCodes.digit0) {
+        const secondChar = str.charCodeAt(1);
+        return (
+          secondChar === charCodes.lowercaseB ||
+          secondChar === charCodes.lowercaseO ||
+          secondChar === charCodes.lowercaseX
+        );
+      }
+      return false;
+    }
     this.word(str);
 
     // Integer tokens need special handling because they cannot have '.'s inserted
     // immediately after them.
     this._endsWithInteger =
-      Number.isInteger(+str) &&
-      !NON_DECIMAL_LITERAL.test(str) &&
+      Number.isInteger(number) &&
+      !isNonDecimalLiteral(str) &&
       !SCIENTIFIC_NOTATION.test(str) &&
       !ZERO_DECIMAL_INTEGER.test(str) &&
       str.charCodeAt(str.length - 1) !== charCodes.dot;
@@ -237,16 +263,18 @@ class Printer {
   /**
    * Writes a simple token.
    */
-
   token(str: string, maybeNewline = false): void {
     this._maybePrintInnerComments();
 
-    // space is mandatory to avoid outputting <!--
-    // http://javascript.spec.whatwg.org/#comment-syntax
     const lastChar = this.getLastChar();
     const strFirst = str.charCodeAt(0);
     if (
-      (lastChar === charCodes.exclamationMark && str === "--") ||
+      (lastChar === charCodes.exclamationMark &&
+        // space is mandatory to avoid outputting <!--
+        // http://javascript.spec.whatwg.org/#comment-syntax
+        (str === "--" ||
+          // Needs spaces to avoid changing a! == 0 to a!== 0
+          strFirst === charCodes.equalsTo)) ||
       // Need spaces for operators of the same kind to avoid: `a+++b`
       (strFirst === charCodes.plusSign && lastChar === charCodes.plusSign) ||
       (strFirst === charCodes.dash && lastChar === charCodes.dash) ||
@@ -264,8 +292,6 @@ class Printer {
   tokenChar(char: number): void {
     this._maybePrintInnerComments();
 
-    // space is mandatory to avoid outputting <!--
-    // http://javascript.spec.whatwg.org/#comment-syntax
     const lastChar = this.getLastChar();
     if (
       // Need spaces for operators of the same kind to avoid: `a+++b`
@@ -328,7 +354,10 @@ class Printer {
   }
 
   exactSource(loc: Loc | undefined, cb: () => void) {
-    if (!loc) return cb();
+    if (!loc) {
+      cb();
+      return;
+    }
 
     this._catchUp("start", loc);
 
@@ -346,14 +375,13 @@ class Printer {
   sourceWithOffset(
     prop: "start" | "end",
     loc: Loc | undefined,
-    lineOffset: number,
     columnOffset: number,
   ): void {
     if (!loc) return;
 
     this._catchUp(prop, loc);
 
-    this._buf.sourceWithOffset(prop, loc, lineOffset, columnOffset);
+    this._buf.sourceWithOffset(prop, loc, columnOffset);
   }
 
   withSource(
@@ -361,7 +389,10 @@ class Printer {
     loc: Loc | undefined,
     cb: () => void,
   ): void {
-    if (!loc) return cb();
+    if (!loc) {
+      cb();
+      return;
+    }
 
     this._catchUp(prop, loc);
 
@@ -421,7 +452,7 @@ class Printer {
       firstChar !== charCodes.lineFeed &&
       this.endsWith(charCodes.lineFeed)
     ) {
-      this._buf.queueIndentation(this._indentChar, this._getIndent());
+      this._buf.queueIndentation(this._getIndent());
     }
   }
 
@@ -541,9 +572,9 @@ class Printer {
     if (!this.format.retainLines) return;
 
     // catch up to this nodes newline if we're behind
-    const pos = loc ? loc[prop] : null;
-    if (pos?.line != null) {
-      const count = pos.line - this._buf.getCurrentLine();
+    const line = loc?.[prop]?.line;
+    if (line != null) {
+      const count = line - this._buf.getCurrentLine();
 
       for (let i = 0; i < count; i++) {
         this._newline();
@@ -643,19 +674,13 @@ class Printer {
     this._insideAux = node.loc == undefined;
     this._maybeAddAuxComment(this._insideAux && !oldInAux);
 
-    let shouldPrintParens = false;
-    if (forceParens) {
-      shouldPrintParens = true;
-    } else if (
-      format.retainFunctionParens &&
-      nodeType === "FunctionExpression" &&
-      node.extra &&
-      node.extra.parenthesized
-    ) {
-      shouldPrintParens = true;
-    } else {
-      shouldPrintParens = needsParens(node, parent, this._printStack);
-    }
+    const shouldPrintParens =
+      forceParens ||
+      (format.retainFunctionParens &&
+        nodeType === "FunctionExpression" &&
+        node.extra?.parenthesized) ||
+      needsParens(node, parent, this._printStack);
+
     if (shouldPrintParens) {
       this.token("(");
       this._endsWithInnerRaw = false;
@@ -737,8 +762,7 @@ class Printer {
   ): string | undefined {
     const extra = node.extra;
     if (
-      extra &&
-      extra.raw != null &&
+      extra?.raw != null &&
       extra.rawValue != null &&
       node.value === extra.rawValue
     ) {
@@ -754,7 +778,16 @@ class Printer {
   ) {
     if (!nodes?.length) return;
 
-    if (opts.indent) this.indent();
+    let { indent } = opts;
+
+    if (indent == null && this.format.retainLines) {
+      const startLine = nodes[0].loc?.start.line;
+      if (startLine != null && startLine !== this._buf.getCurrentLine()) {
+        indent = true;
+      }
+    }
+
+    if (indent) this.indent();
 
     const newlineOpts: AddNewlinesOptions = {
       addNewlines: opts.addNewlines,
@@ -788,7 +821,7 @@ class Printer {
       }
     }
 
-    if (opts.indent) this.dedent();
+    if (indent) this.dedent();
   }
 
   printAndIndentOnComments(node: t.Node, parent: t.Node) {
@@ -871,7 +904,8 @@ class Printer {
     opts: PrintSequenceOptions = {},
   ) {
     opts.statement = true;
-    return this.printJoin(nodes, parent, opts);
+    opts.indent ??= false;
+    this.printJoin(nodes, parent, opts);
   }
 
   printList(items: t.Node[], parent: t.Node, opts: PrintListOptions = {}) {
@@ -879,16 +913,18 @@ class Printer {
       opts.separator = commaSeparator;
     }
 
-    return this.printJoin(items, parent, opts);
+    this.printJoin(items, parent, opts);
   }
 
   _printNewline(newLine: boolean, opts: AddNewlinesOptions) {
+    const format = this.format;
+
     // Fast path since 'this.newline' does nothing when not tracking lines.
-    if (this.format.retainLines || this.format.compact) return;
+    if (format.retainLines || format.compact) return;
 
     // Fast path for concise since 'this.newline' just inserts a space when
     // concise formatting is in use.
-    if (this.format.concise) {
+    if (format.concise) {
       this.space();
       return;
     }
@@ -939,8 +975,7 @@ class Printer {
 
     if (
       this._noLineTerminator &&
-      (HAS_NEWLINE.test(comment.value) ||
-        HAS_BlOCK_COMMENT_END.test(comment.value))
+      HAS_NEWLINE_OR_BlOCK_COMMENT_END.test(comment.value)
     ) {
       return PRINT_COMMENT_HINT.DEFER;
     }
@@ -990,16 +1025,19 @@ class Printer {
           const newlineRegex = new RegExp("\\n\\s{1," + offset + "}", "g");
           val = val.replace(newlineRegex, "\n");
         }
+        if (this.format.concise) {
+          val = val.replace(/\n(?!$)/g, `\n`);
+        } else {
+          let indentSize = this.format.retainLines
+            ? 0
+            : this._buf.getCurrentColumn();
 
-        let indentSize = this.format.retainLines
-          ? 0
-          : this._buf.getCurrentColumn();
+          if (this._shouldIndent(charCodes.slash) || this.format.retainLines) {
+            indentSize += this._getIndent();
+          }
 
-        if (this._shouldIndent(charCodes.slash) || this.format.retainLines) {
-          indentSize += this._getIndent();
+          val = val.replace(/\n(?!$)/g, `\n${" ".repeat(indentSize)}`);
         }
-
-        val = val.replace(/\n(?!$)/g, `\n${" ".repeat(indentSize)}`);
       }
     } else if (!noLineTerminator) {
       val = `//${comment.value}`;
@@ -1148,8 +1186,8 @@ class Printer {
             i === 0
               ? COMMENT_SKIP_NEWLINE.LEADING
               : i === len - 1
-              ? COMMENT_SKIP_NEWLINE.TRAILING
-              : COMMENT_SKIP_NEWLINE.DEFAULT,
+                ? COMMENT_SKIP_NEWLINE.TRAILING
+                : COMMENT_SKIP_NEWLINE.DEFAULT,
           );
         } else {
           this._printComment(comment, COMMENT_SKIP_NEWLINE.DEFAULT);

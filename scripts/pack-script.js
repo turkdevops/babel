@@ -1,21 +1,32 @@
-import { fileURLToPath } from "url";
 import path from "path";
-import { writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { rollup } from "rollup";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import { babel } from "@rollup/plugin-babel";
-import { terser } from "rollup-plugin-terser";
+import terser from "@rollup/plugin-terser";
+import { commonJS } from "$repo-utils";
+import { createHash } from "crypto";
 
-const root = fileURLToPath(path.dirname(import.meta.url));
+const { __dirname, require } = commonJS(import.meta.url);
 
 pack("../Makefile.source.mjs", "../Makefile.js", [
   "node_modules/shelljs/src/*.js",
 ]);
 
 async function pack(inputPath, outputPath, dynamicRequireTargets) {
-  inputPath = path.join(root, inputPath);
-  outputPath = path.join(root, outputPath);
+  inputPath = path.join(__dirname, inputPath);
+  outputPath = path.join(__dirname, outputPath);
+
+  const hash = createHash("sha1")
+    .update(readFileSync(inputPath, "utf8"))
+    .digest("hex");
+
+  if (process.argv[2] == "--auto") {
+    if (readFileSync(outputPath, "utf8").includes(hash)) {
+      return;
+    }
+  }
 
   const bundle = await rollup({
     input: inputPath,
@@ -36,7 +47,7 @@ async function pack(inputPath, outputPath, dynamicRequireTargets) {
             {
               targets: { node: 6 },
               useBuiltIns: "usage",
-              corejs: "3.23",
+              corejs: require("core-js/package.json").version,
             },
           ],
         ],
@@ -48,7 +59,8 @@ async function pack(inputPath, outputPath, dynamicRequireTargets) {
     format: "cjs",
   });
 
-  const output = `/* eslint-disable */
+  const output = `// source hash: ${hash}
+/* eslint-disable */
 // prettier-ignore
 ${result.output[0].code}`;
   writeFileSync(outputPath, output);

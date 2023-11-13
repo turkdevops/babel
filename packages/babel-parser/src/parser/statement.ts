@@ -1,49 +1,36 @@
-import type * as N from "../types";
+import type * as N from "../types.ts";
 import {
   tokenIsIdentifier,
+  tokenIsKeywordOrIdentifier,
   tokenIsLoop,
   tokenIsTemplate,
   tt,
   type TokenType,
   getExportedToken,
-} from "../tokenizer/types";
-import ExpressionParser from "./expression";
-import { Errors } from "../parse-error";
-import { isIdentifierChar, isIdentifierStart } from "../util/identifier";
-import { lineBreak } from "../util/whitespace";
+} from "../tokenizer/types.ts";
+import ExpressionParser from "./expression.ts";
+import { Errors } from "../parse-error.ts";
+import { isIdentifierChar, isIdentifierStart } from "../util/identifier.ts";
 import * as charCodes from "charcodes";
 import {
-  BIND_CLASS,
-  BIND_LEXICAL,
-  BIND_VAR,
-  BIND_FUNCTION,
-  SCOPE_CLASS,
-  SCOPE_FUNCTION,
-  SCOPE_OTHER,
-  SCOPE_SIMPLE_CATCH,
-  SCOPE_STATIC_BLOCK,
-  SCOPE_SUPER,
-  CLASS_ELEMENT_OTHER,
-  CLASS_ELEMENT_INSTANCE_GETTER,
-  CLASS_ELEMENT_INSTANCE_SETTER,
-  CLASS_ELEMENT_STATIC_GETTER,
-  CLASS_ELEMENT_STATIC_SETTER,
+  ScopeFlag,
+  ClassElementType,
   type BindingTypes,
-  BIND_CATCH_PARAM,
-} from "../util/scopeflags";
-import { ExpressionErrors } from "./util";
-import { PARAM, functionFlags } from "../util/production-parameter";
+  BindingFlag,
+} from "../util/scopeflags.ts";
+import { ExpressionErrors } from "./util.ts";
+import { ParamKind, functionFlags } from "../util/production-parameter.ts";
 import {
   newExpressionScope,
   newParameterDeclarationScope,
-} from "../util/expression-scope";
-import type { SourceType } from "../options";
-import { Token } from "../tokenizer";
-import type { Position } from "../util/location";
-import { createPositionWithColumnOffset } from "../util/location";
-import { cloneStringLiteral, cloneIdentifier, type Undone } from "./node";
-import type Parser from "./index";
-import { ParseBindingListFlags } from "./lval";
+} from "../util/expression-scope.ts";
+import type { SourceType } from "../options.ts";
+import { Token } from "../tokenizer/index.ts";
+import type { Position } from "../util/location.ts";
+import { createPositionWithColumnOffset } from "../util/location.ts";
+import { cloneStringLiteral, cloneIdentifier, type Undone } from "./node.ts";
+import type Parser from "./index.ts";
+import { ParseBindingListFlags } from "./lval.ts";
 
 const loopLabel = { kind: "loop" } as const,
   switchLabel = { kind: "switch" } as const;
@@ -329,23 +316,37 @@ export default abstract class StatementParser extends ExpressionParser {
 
   /**
    * Assuming we have seen a contextual `using` and declaration is allowed, check if it
-   * starts a variable declaration so that it should be interpreted as a keyword.
+   * starts a variable declaration in the same line so that it should be interpreted as
+   * a keyword.
    */
-  hasFollowingBindingIdentifier(): boolean {
-    const next = this.nextTokenStart();
+  hasInLineFollowingBindingIdentifier(): boolean {
+    const next = this.nextTokenInLineStart();
     const nextCh = this.codePointAtPos(next);
     return this.chStartsBindingIdentifier(nextCh, next);
   }
 
   startsUsingForOf(): boolean {
-    const lookahead = this.lookahead();
-    if (lookahead.type === tt._of && !lookahead.containsEsc) {
+    const { type, containsEsc } = this.lookahead();
+    if (type === tt._of && !containsEsc) {
       // `using of` must start a for-lhs-of statement
       return false;
-    } else {
+    } else if (tokenIsIdentifier(type) && !this.hasFollowingLineBreak()) {
       this.expectPlugin("explicitResourceManagement");
       return true;
     }
+  }
+
+  startsAwaitUsing(): boolean {
+    let next = this.nextTokenInLineStart();
+    if (this.isUnparsedContextual(next, "using")) {
+      next = this.nextTokenInLineStartSince(next + 5);
+      const nextCh = this.codePointAtPos(next);
+      if (this.chStartsBindingIdentifier(nextCh, next)) {
+        this.expectPlugin("explicitResourceManagement");
+        return true;
+      }
+    }
+    return false;
   }
 
   // https://tc39.es/ecma262/#prod-ModuleItem
@@ -451,8 +452,8 @@ export default abstract class StatementParser extends ExpressionParser {
             this.state.strict
               ? Errors.StrictFunction
               : this.options.annexB
-              ? Errors.SloppyFunctionAnnexB
-              : Errors.SloppyFunction,
+                ? Errors.SloppyFunctionAnnexB
+                : Errors.SloppyFunction,
             { at: this.state.startLoc },
           );
         }
@@ -482,12 +483,28 @@ export default abstract class StatementParser extends ExpressionParser {
       case tt._try:
         return this.parseTryStatement(node as Undone<N.TryStatement>);
 
+      case tt._await:
+        // [+Await] await [no LineTerminator here] using [no LineTerminator here] BindingList[+Using]
+        if (!this.state.containsEsc && this.startsAwaitUsing()) {
+          if (!this.isAwaitAllowed()) {
+            this.raise(Errors.AwaitUsingNotInAsyncContext, { at: node });
+          } else if (!allowDeclaration) {
+            this.raise(Errors.UnexpectedLexicalDeclaration, {
+              at: node,
+            });
+          }
+          this.next(); // eat 'await'
+          return this.parseVarStatement(
+            node as Undone<N.VariableDeclaration>,
+            "await using",
+          );
+        }
+        break;
       case tt._using:
-        // using [no LineTerminator here][lookahead != `await`] BindingList[+Using]
+        // using [no LineTerminator here] BindingList[+Using]
         if (
-          this.hasFollowingLineBreak() ||
           this.state.containsEsc ||
-          !this.hasFollowingBindingIdentifier()
+          !this.hasInLineFollowingBindingIdentifier()
         ) {
           break;
         }
@@ -902,7 +919,7 @@ export default abstract class StatementParser extends ExpressionParser {
     if (this.isAwaitAllowed() && this.eatContextual(tt._await)) {
       awaitAt = this.state.lastTokStartLoc;
     }
-    this.scope.enter(SCOPE_OTHER);
+    this.scope.enter(ScopeFlag.OTHER);
     this.expect(tt.parenL);
 
     if (this.match(tt.semi)) {
@@ -913,34 +930,49 @@ export default abstract class StatementParser extends ExpressionParser {
     }
 
     const startsWithLet = this.isContextual(tt._let);
-    const startsWithUsing =
-      this.isContextual(tt._using) && !this.hasFollowingLineBreak();
-    const isLetOrUsing =
-      (startsWithLet && this.hasFollowingBindingAtom()) ||
-      (startsWithUsing &&
-        this.hasFollowingBindingIdentifier() &&
-        this.startsUsingForOf());
-    if (this.match(tt._var) || this.match(tt._const) || isLetOrUsing) {
-      const initNode = this.startNode<N.VariableDeclaration>();
-      const kind = this.state.value;
-      this.next();
-      this.parseVar(initNode, true, kind);
-      const init = this.finishNode(initNode, "VariableDeclaration");
+    {
+      const startsWithAwaitUsing =
+        this.isContextual(tt._await) && this.startsAwaitUsing();
+      const starsWithUsingDeclaration =
+        startsWithAwaitUsing ||
+        (this.isContextual(tt._using) && this.startsUsingForOf());
+      const isLetOrUsing =
+        (startsWithLet && this.hasFollowingBindingAtom()) ||
+        starsWithUsingDeclaration;
 
-      const isForIn = this.match(tt._in);
-      if (isForIn && startsWithUsing) {
-        this.raise(Errors.ForInUsing, { at: init });
+      if (this.match(tt._var) || this.match(tt._const) || isLetOrUsing) {
+        const initNode = this.startNode<N.VariableDeclaration>();
+        let kind;
+        if (startsWithAwaitUsing) {
+          kind = "await using";
+          if (!this.isAwaitAllowed()) {
+            this.raise(Errors.AwaitUsingNotInAsyncContext, {
+              at: this.state.startLoc,
+            });
+          }
+          this.next(); // eat 'await'
+        } else {
+          kind = this.state.value;
+        }
+        this.next();
+        this.parseVar(initNode, true, kind);
+        const init = this.finishNode(initNode, "VariableDeclaration");
+
+        const isForIn = this.match(tt._in);
+        if (isForIn && starsWithUsingDeclaration) {
+          this.raise(Errors.ForInUsing, { at: init });
+        }
+        if (
+          (isForIn || this.isContextual(tt._of)) &&
+          init.declarations.length === 1
+        ) {
+          return this.parseForIn(node as Undone<N.ForInOf>, init, awaitAt);
+        }
+        if (awaitAt !== null) {
+          this.unexpected(awaitAt);
+        }
+        return this.parseFor(node as Undone<N.ForStatement>, init);
       }
-      if (
-        (isForIn || this.isContextual(tt._of)) &&
-        init.declarations.length === 1
-      ) {
-        return this.parseForIn(node as Undone<N.ForInOf>, init, awaitAt);
-      }
-      if (awaitAt !== null) {
-        this.unexpected(awaitAt);
-      }
-      return this.parseFor(node as Undone<N.ForStatement>, init);
     }
 
     // Check whether the first token is possibly a contextual keyword, so that
@@ -1046,7 +1078,7 @@ export default abstract class StatementParser extends ExpressionParser {
     const cases: N.SwitchStatement["cases"] = (node.cases = []);
     this.expect(tt.braceL);
     this.state.labels.push(switchLabel);
-    this.scope.enter(SCOPE_OTHER);
+    this.scope.enter(ScopeFlag.OTHER);
 
     // Statements under must be grouped (by label) in SwitchCase
     // nodes. `cur` is used to keep the node that we are currently
@@ -1103,12 +1135,12 @@ export default abstract class StatementParser extends ExpressionParser {
 
     this.scope.enter(
       this.options.annexB && param.type === "Identifier"
-        ? SCOPE_SIMPLE_CATCH
+        ? ScopeFlag.SIMPLE_CATCH
         : 0,
     );
     this.checkLVal(param, {
       in: { type: "CatchClause" },
-      binding: BIND_CATCH_PARAM,
+      binding: BindingFlag.TYPE_CATCH_PARAM,
     });
 
     return param;
@@ -1132,7 +1164,7 @@ export default abstract class StatementParser extends ExpressionParser {
         this.expect(tt.parenR);
       } else {
         clause.param = null;
-        this.scope.enter(SCOPE_OTHER);
+        this.scope.enter(ScopeFlag.OTHER);
       }
 
       // Parse the catch clause's body.
@@ -1162,7 +1194,7 @@ export default abstract class StatementParser extends ExpressionParser {
   parseVarStatement(
     this: Parser,
     node: Undone<N.VariableDeclaration>,
-    kind: "var" | "let" | "const" | "using",
+    kind: "var" | "let" | "const" | "using" | "await using",
     allowMissingInitializer: boolean = false,
   ): N.VariableDeclaration {
     this.next();
@@ -1244,8 +1276,8 @@ export default abstract class StatementParser extends ExpressionParser {
     const kind = tokenIsLoop(this.state.type)
       ? "loop"
       : this.match(tt._switch)
-      ? "switch"
-      : null;
+        ? "switch"
+        : null;
     for (let i = this.state.labels.length - 1; i >= 0; i--) {
       const label = this.state.labels[i];
       if (label.statementStart === node.start) {
@@ -1299,7 +1331,7 @@ export default abstract class StatementParser extends ExpressionParser {
     }
     this.expect(tt.braceL);
     if (createNewLexicalScope) {
-      this.scope.enter(SCOPE_OTHER);
+      this.scope.enter(ScopeFlag.OTHER);
     }
     this.parseBlockBody(
       node,
@@ -1384,9 +1416,7 @@ export default abstract class StatementParser extends ExpressionParser {
       body.push(stmt);
     }
 
-    if (afterBlockParse) {
-      afterBlockParse.call(this, hasStrictModeDirective);
-    }
+    afterBlockParse?.call(this, hasStrictModeDirective);
 
     if (!oldStrict) {
       this.setStrict(false);
@@ -1495,7 +1525,7 @@ export default abstract class StatementParser extends ExpressionParser {
     this: Parser,
     node: Undone<N.VariableDeclaration>,
     isFor: boolean,
-    kind: "var" | "let" | "const" | "using",
+    kind: "var" | "let" | "const" | "using" | "await using",
     allowMissingInitializer: boolean = false,
   ): Undone<N.VariableDeclaration> {
     const declarations: N.VariableDeclarator[] = (node.declarations = []);
@@ -1506,8 +1536,8 @@ export default abstract class StatementParser extends ExpressionParser {
       decl.init = !this.eat(tt.eq)
         ? null
         : isFor
-        ? this.parseMaybeAssignDisallowIn()
-        : this.parseMaybeAssignAllowIn();
+          ? this.parseMaybeAssignDisallowIn()
+          : this.parseMaybeAssignAllowIn();
 
       if (decl.init === null && !allowMissingInitializer) {
         if (
@@ -1537,17 +1567,12 @@ export default abstract class StatementParser extends ExpressionParser {
   parseVarId(
     this: Parser,
     decl: Undone<N.VariableDeclarator>,
-    kind: "var" | "let" | "const" | "using",
+    kind: "var" | "let" | "const" | "using" | "await using",
   ): void {
-    // Unlike "let" which must be handled in checkLVal, it suffices to check
-    // await here because `using` must not precede binding patterns.
-    if (kind === "using" && !this.inModule && this.match(tt._await)) {
-      this.raise(Errors.AwaitInUsingBinding, { at: this.state.startLoc });
-    }
     const id = this.parseBindingAtom();
     this.checkLVal(id, {
       in: { type: "VariableDeclarator" },
-      binding: kind === "var" ? BIND_VAR : BIND_LEXICAL,
+      binding: kind === "var" ? BindingFlag.TYPE_VAR : BindingFlag.TYPE_LEXICAL,
     });
     decl.id = id;
   }
@@ -1591,7 +1616,7 @@ export default abstract class StatementParser extends ExpressionParser {
 
     const oldMaybeInArrowParameters = this.state.maybeInArrowParameters;
     this.state.maybeInArrowParameters = false;
-    this.scope.enter(SCOPE_FUNCTION);
+    this.scope.enter(ScopeFlag.FUNCTION);
     this.prodParam.enter(functionFlags(isAsync, node.generator));
 
     if (!isDeclaration) {
@@ -1652,16 +1677,16 @@ export default abstract class StatementParser extends ExpressionParser {
     if (!node.id) return;
 
     // If it is a regular function declaration in sloppy mode, then it is
-    // subject to Annex B semantics (BIND_FUNCTION). Otherwise, the binding
+    // subject to Annex B semantics (BindingFlag.TYPE_FUNCTION). Otherwise, the binding
     // mode depends on properties of the current scope (see
     // treatFunctionsAsVar).
     this.scope.declareName(
       node.id.name,
       !this.options.annexB || this.state.strict || node.generator || node.async
         ? this.scope.treatFunctionsAsVar
-          ? BIND_VAR
-          : BIND_LEXICAL
-        : BIND_FUNCTION,
+          ? BindingFlag.TYPE_VAR
+          : BindingFlag.TYPE_LEXICAL
+        : BindingFlag.TYPE_FUNCTION,
       node.id.loc.start,
     );
   }
@@ -2076,13 +2101,15 @@ export default abstract class StatementParser extends ExpressionParser {
     >,
   ) {
     // Start a new lexical scope
-    this.scope.enter(SCOPE_CLASS | SCOPE_STATIC_BLOCK | SCOPE_SUPER);
+    this.scope.enter(
+      ScopeFlag.CLASS | ScopeFlag.STATIC_BLOCK | ScopeFlag.SUPER,
+    );
     // Start a new scope with regard to loop labels
     const oldLabels = this.state.labels;
     this.state.labels = [];
     // ClassStaticBlockStatementList:
     //   StatementList[~Yield, ~Await, ~Return] opt
-    this.prodParam.enter(PARAM);
+    this.prodParam.enter(ParamKind.PARAM);
     const body: N.Node[] = (member.body = []);
     this.parseBlockOrModuleBlockBody(body, undefined, false, tt.braceR);
     this.prodParam.exit();
@@ -2121,7 +2148,7 @@ export default abstract class StatementParser extends ExpressionParser {
 
     this.classScope.declarePrivateName(
       this.getPrivateNameSV(node.key),
-      CLASS_ELEMENT_OTHER,
+      ClassElementType.OTHER,
       node.key.loc.start,
     );
   }
@@ -2149,7 +2176,7 @@ export default abstract class StatementParser extends ExpressionParser {
     if (isPrivate) {
       this.classScope.declarePrivateName(
         this.getPrivateNameSV(node.key),
-        CLASS_ELEMENT_OTHER,
+        ClassElementType.OTHER,
         node.key.loc.start,
       );
     }
@@ -2198,13 +2225,13 @@ export default abstract class StatementParser extends ExpressionParser {
     const kind =
       node.kind === "get"
         ? node.static
-          ? CLASS_ELEMENT_STATIC_GETTER
-          : CLASS_ELEMENT_INSTANCE_GETTER
+          ? ClassElementType.STATIC_GETTER
+          : ClassElementType.INSTANCE_GETTER
         : node.kind === "set"
-        ? node.static
-          ? CLASS_ELEMENT_STATIC_SETTER
-          : CLASS_ELEMENT_INSTANCE_SETTER
-        : CLASS_ELEMENT_OTHER;
+          ? node.static
+            ? ClassElementType.STATIC_SETTER
+            : ClassElementType.INSTANCE_SETTER
+          : ClassElementType.OTHER;
     this.declareClassPrivateMethodInScope(node, kind);
   }
 
@@ -2260,9 +2287,9 @@ export default abstract class StatementParser extends ExpressionParser {
       N.ClassProperty | N.ClassPrivateProperty | N.ClassAccessorProperty
     >,
   ): void {
-    this.scope.enter(SCOPE_CLASS | SCOPE_SUPER);
+    this.scope.enter(ScopeFlag.CLASS | ScopeFlag.SUPER);
     this.expressionScope.enter(newExpressionScope());
-    this.prodParam.enter(PARAM);
+    this.prodParam.enter(ParamKind.PARAM);
     node.value = this.eat(tt.eq) ? this.parseMaybeAssignAllowIn() : null;
     this.expressionScope.exit();
     this.prodParam.exit();
@@ -2273,7 +2300,7 @@ export default abstract class StatementParser extends ExpressionParser {
     node: Undone<N.Class>,
     isStatement: boolean,
     optionalId?: boolean | null,
-    bindingType: BindingTypes = BIND_CLASS,
+    bindingType: BindingTypes = BindingFlag.TYPE_CLASS,
   ): void {
     if (tokenIsIdentifier(this.state.type)) {
       node.id = this.parseIdentifier();
@@ -2306,9 +2333,13 @@ export default abstract class StatementParser extends ExpressionParser {
     >,
     decorators: N.Decorator[] | null,
   ): N.AnyExport {
-    const hasDefault = this.maybeParseExportDefaultSpecifier(
-      // @ts-expect-error todo(flow->ts)
+    const maybeDefaultIdentifier = this.parseMaybeImportPhase(
       node,
+      /* isExport */ true,
+    );
+    const hasDefault = this.maybeParseExportDefaultSpecifier(
+      node,
+      maybeDefaultIdentifier,
     );
     const parseAfterDefault = !hasDefault || this.eat(tt.comma);
     const hasStar =
@@ -2343,11 +2374,11 @@ export default abstract class StatementParser extends ExpressionParser {
     );
 
     if (hasDefault && parseAfterDefault && !hasStar && !hasSpecifiers) {
-      throw this.unexpected(null, tt.braceL);
+      this.unexpected(null, tt.braceL);
     }
 
     if (hasNamespace && parseAfterNamespace) {
-      throw this.unexpected(null, tt._from);
+      this.unexpected(null, tt._from);
     }
 
     let hasDeclaration;
@@ -2394,7 +2425,7 @@ export default abstract class StatementParser extends ExpressionParser {
       return this.finishNode(node2, "ExportDefaultDeclaration");
     }
 
-    throw this.unexpected(null, tt.braceL);
+    this.unexpected(null, tt.braceL);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2402,13 +2433,23 @@ export default abstract class StatementParser extends ExpressionParser {
     return this.eat(tt.star);
   }
 
-  maybeParseExportDefaultSpecifier(node: N.Node): boolean {
-    if (this.isExportDefaultSpecifier()) {
+  maybeParseExportDefaultSpecifier(
+    node: Undone<
+      | N.ExportDefaultDeclaration
+      | N.ExportAllDeclaration
+      | N.ExportNamedDeclaration
+    >,
+    maybeDefaultIdentifier: N.Identifier | null,
+  ): node is Undone<N.ExportNamedDeclaration> {
+    if (maybeDefaultIdentifier || this.isExportDefaultSpecifier()) {
       // export defaultObj ...
-      this.expectPlugin("exportDefaultFrom");
-      const specifier = this.startNode();
-      specifier.exported = this.parseIdentifier(true);
-      node.specifiers = [this.finishNode(specifier, "ExportDefaultSpecifier")];
+      this.expectPlugin("exportDefaultFrom", maybeDefaultIdentifier?.loc.start);
+      const id = maybeDefaultIdentifier || this.parseIdentifier(true);
+      const specifier = this.startNodeAtNode<N.ExportDefaultSpecifier>(id);
+      specifier.exported = id;
+      (node as Undone<N.ExportNamedDeclaration>).specifiers = [
+        this.finishNode(specifier, "ExportDefaultSpecifier"),
+      ];
       return true;
     }
     return false;
@@ -2466,11 +2507,8 @@ export default abstract class StatementParser extends ExpressionParser {
 
   isAsyncFunction(): boolean {
     if (!this.isContextual(tt._async)) return false;
-    const next = this.nextTokenStart();
-    return (
-      !lineBreak.test(this.input.slice(this.state.pos, next)) &&
-      this.isUnparsedContextual(next, "function")
-    );
+    const next = this.nextTokenInLineStart();
+    return this.isUnparsedContextual(next, "function");
   }
 
   parseExportDefaultExpression(this: Parser): N.Expression | N.Declaration {
@@ -2598,11 +2636,8 @@ export default abstract class StatementParser extends ExpressionParser {
     if (this.eatContextual(tt._from)) {
       node.source = this.parseImportSource();
       this.checkExport(node);
-      const assertions = this.maybeParseImportAssertions();
-      if (assertions) {
-        node.assertions = assertions;
-        this.checkJSONModuleImport(node);
-      }
+      this.maybeParseImportAttributes(node);
+      this.checkJSONModuleImport(node);
     } else if (expect) {
       this.unexpected();
     }
@@ -2663,7 +2698,7 @@ export default abstract class StatementParser extends ExpressionParser {
           }
         }
         // @ts-expect-error node.specifiers may not exist
-      } else if (node.specifiers && node.specifiers.length) {
+      } else if (node.specifiers?.length) {
         // Named exports
         // @ts-expect-error node.specifiers may not exist
         for (const specifier of node.specifiers) {
@@ -2835,13 +2870,26 @@ export default abstract class StatementParser extends ExpressionParser {
   }
 
   checkImportReflection(node: Undone<N.ImportDeclaration>) {
-    if (node.module) {
-      if (
-        node.specifiers.length !== 1 ||
-        node.specifiers[0].type !== "ImportDefaultSpecifier"
-      ) {
+    const { specifiers } = node;
+    const singleBindingType =
+      specifiers.length === 1 ? specifiers[0].type : null;
+
+    if (node.phase === "source") {
+      if (singleBindingType !== "ImportDefaultSpecifier") {
+        this.raise(Errors.SourcePhaseImportRequiresDefault, {
+          at: specifiers[0].loc.start,
+        });
+      }
+    } else if (node.phase === "defer") {
+      if (singleBindingType !== "ImportNamespaceSpecifier") {
+        this.raise(Errors.DeferImportRequiresNamespace, {
+          at: specifiers[0].loc.start,
+        });
+      }
+    } else if (node.module) {
+      if (singleBindingType !== "ImportDefaultSpecifier") {
         this.raise(Errors.ImportReflectionNotBinding, {
-          at: node.specifiers[0].loc.start,
+          at: specifiers[0].loc.start,
         });
       }
       if (node.assertions?.length > 0) {
@@ -2885,81 +2933,193 @@ export default abstract class StatementParser extends ExpressionParser {
     }
   }
 
-  parseMaybeImportReflection(node: Undone<N.ImportDeclaration>) {
-    let isImportReflection = false;
-    if (this.isContextual(tt._module)) {
-      const lookahead = this.lookahead();
-      const nextType = lookahead.type;
-      if (tokenIsIdentifier(nextType)) {
-        if (nextType !== tt._from) {
-          // import module x
-          isImportReflection = true;
-        } else {
-          const nextNextTokenFirstChar = this.input.charCodeAt(
-            this.nextTokenStartSince(lookahead.end),
+  isPotentialImportPhase(isExport: boolean): boolean {
+    if (isExport) return false;
+    return (
+      this.isContextual(tt._source) ||
+      this.isContextual(tt._defer) ||
+      this.isContextual(tt._module)
+    );
+  }
+
+  applyImportPhase(
+    node: Undone<N.ImportDeclaration | N.ExportNamedDeclaration>,
+    isExport: boolean,
+    phase: string | null,
+    loc?: Position,
+  ): void {
+    if (isExport) {
+      if (!process.env.IS_PUBLISH) {
+        if (phase === "module" || phase === "source") {
+          throw new Error(
+            `Assertion failure: export declarations do not support the '${phase}' phase.`,
           );
-          if (nextNextTokenFirstChar === charCodes.lowercaseF) {
-            // import module from from ...
-            isImportReflection = true;
-          }
         }
-      } else if (nextType !== tt.comma) {
-        // import module { x } ...
-        // import module "foo"
-        // They are invalid, we will continue parsing and throw
-        // a recoverable error later
-        isImportReflection = true;
       }
+      return;
     }
-    if (isImportReflection) {
-      this.expectPlugin("importReflection");
-      this.next(); // eat tt._module;
-      node.module = true;
+
+    if (phase === "module") {
+      this.expectPlugin("importReflection", loc);
+      (node as N.ImportDeclaration).module = true;
     } else if (this.hasPlugin("importReflection")) {
-      node.module = false;
+      (node as N.ImportDeclaration).module = false;
     }
+
+    if (phase === "source") {
+      this.expectPlugin("sourcePhaseImports", loc);
+      (node as N.ImportDeclaration).phase = "source";
+    } else if (phase === "defer") {
+      this.expectPlugin("deferredImportEvaluation", loc);
+      (node as N.ImportDeclaration).phase = "defer";
+    } else if (this.hasPlugin("sourcePhaseImports")) {
+      (node as N.ImportDeclaration).phase = null;
+    }
+  }
+
+  /*
+   * Parse `module` in `import module x from "x"`, disambiguating
+   * `import module from "x"` and `import module from from "x"`.
+   *
+   * This function might return an identifier representing the `module`
+   * if it eats `module` and then discovers that it was the default import
+   * binding and not the import reflection.
+   *
+   * This function is also used to parse `import type` and `import typeof`
+   * in the TS and Flow plugins.
+   *
+   * Note: the proposal has been updated to use `source` instead of `module`,
+   * but it has not been implemented yet.
+   */
+  parseMaybeImportPhase(
+    node: Undone<N.ImportDeclaration | N.TsImportEqualsDeclaration>,
+    isExport: boolean,
+  ): N.Identifier | null {
+    if (!this.isPotentialImportPhase(isExport)) {
+      this.applyImportPhase(
+        node as Undone<N.ImportDeclaration>,
+        isExport,
+        null,
+      );
+      return null;
+    }
+
+    const phaseIdentifier = this.parseIdentifier(true);
+
+    const { type } = this.state;
+    const isImportPhase = tokenIsKeywordOrIdentifier(type)
+      ? // OK: import <phase> x from "foo";
+        // OK: import <phase> from from "foo";
+        // NO: import <phase> from "foo";
+        // NO: import <phase> from 'foo';
+        // With the module declarations proposals, we will need further disambiguation
+        // for `import module from from;`.
+        type !== tt._from || this.lookaheadCharCode() === charCodes.lowercaseF
+      : // OK: import <phase> { x } from "foo";
+        // OK: import <phase> x from "foo";
+        // OK: import <phase> * as T from "foo";
+        // NO: import <phase> from "foo";
+        // OK: import <phase> "foo";
+        // The last one is invalid, we will continue parsing and throw
+        // an error later
+        type !== tt.comma;
+
+    if (isImportPhase) {
+      this.resetPreviousIdentifierLeadingComments(phaseIdentifier);
+      this.applyImportPhase(
+        node as Undone<N.ImportDeclaration>,
+        isExport,
+        phaseIdentifier.name,
+        phaseIdentifier.loc.start,
+      );
+      return null;
+    } else {
+      this.applyImportPhase(
+        node as Undone<N.ImportDeclaration>,
+        isExport,
+        null,
+      );
+      // `<phase>` is a default binding, return it to the main import declaration parser
+      return phaseIdentifier;
+    }
+  }
+
+  isPrecedingIdImportPhase(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    phase: string,
+  ) {
+    const { type } = this.state;
+    return tokenIsIdentifier(type)
+      ? // OK: import <phase> x from "foo";
+        // OK: import <phase> from from "foo";
+        // NO: import <phase> from "foo";
+        // NO: import <phase> from 'foo';
+        // With the module declarations proposals, we will need further disambiguation
+        // for `import module from from;`.
+        type !== tt._from || this.lookaheadCharCode() === charCodes.lowercaseF
+      : // OK: import <phase> { x } from "foo";
+        // OK: import <phase> x from "foo";
+        // OK: import <phase> * as T from "foo";
+        // NO: import <phase> from "foo";
+        // OK: import <phase> "foo";
+        // The last one is invalid, we will continue parsing and throw
+        // an error later
+        type !== tt.comma;
   }
 
   // Parses import declaration.
   // https://tc39.es/ecma262/#prod-ImportDeclaration
 
   parseImport(this: Parser, node: Undone<N.ImportDeclaration>): N.AnyImport {
-    // import '...'
+    if (this.match(tt.string)) {
+      // import '...'
+      return this.parseImportSourceAndAttributes(node);
+    }
+
+    return this.parseImportSpecifiersAndAfter(
+      node,
+      this.parseMaybeImportPhase(node, /* isExport */ false),
+    );
+  }
+
+  parseImportSpecifiersAndAfter(
+    this: Parser,
+    node: Undone<N.ImportDeclaration>,
+    maybeDefaultIdentifier: N.Identifier | null,
+  ): N.AnyImport {
     node.specifiers = [];
-    if (!this.match(tt.string)) {
-      this.parseMaybeImportReflection(node);
-      // check if we have a default import like
-      // import React from "react";
-      const hasDefault = this.maybeParseDefaultImportSpecifier(node);
-      /* we are checking if we do not have a default import, then it is obvious that we need named imports
-       * import { get } from "axios";
-       * but if we do have a default import
-       * we need to check if we have a comma after that and
-       * that is where this `|| this.eat` condition comes into play
-       */
-      const parseNext = !hasDefault || this.eat(tt.comma);
-      // if we do have to parse the next set of specifiers, we first check for star imports
-      // import React, * from "react";
-      const hasStar = parseNext && this.maybeParseStarImportSpecifier(node);
-      // now we check if we need to parse the next imports
-      // but only if they are not importing * (everything)
-      if (parseNext && !hasStar) this.parseNamedImportSpecifiers(node);
-      this.expectContextual(tt._from);
-    }
+
+    // check if we have a default import like
+    // import React from "react";
+    const hasDefault = this.maybeParseDefaultImportSpecifier(
+      node,
+      maybeDefaultIdentifier,
+    );
+    /* we are checking if we do not have a default import, then it is obvious that we need named imports
+     * import { get } from "axios";
+     * but if we do have a default import
+     * we need to check if we have a comma after that and
+     * that is where this `|| this.eat` condition comes into play
+     */
+    const parseNext = !hasDefault || this.eat(tt.comma);
+    // if we do have to parse the next set of specifiers, we first check for star imports
+    // import React, * from "react";
+    const hasStar = parseNext && this.maybeParseStarImportSpecifier(node);
+    // now we check if we need to parse the next imports
+    // but only if they are not importing * (everything)
+    if (parseNext && !hasStar) this.parseNamedImportSpecifiers(node);
+    this.expectContextual(tt._from);
+
+    return this.parseImportSourceAndAttributes(node);
+  }
+
+  parseImportSourceAndAttributes(
+    this: Parser,
+    node: Undone<N.ImportDeclaration>,
+  ): N.AnyImport {
+    node.specifiers ??= [];
     node.source = this.parseImportSource();
-    // https://github.com/tc39/proposal-import-assertions
-    // parse module import assertions if the next token is `assert` or ignore
-    // and finish the ImportDeclaration node.
-    const assertions = this.maybeParseImportAssertions();
-    if (assertions) {
-      node.assertions = assertions;
-    } else if (!process.env.BABEL_8_BREAKING) {
-      const attributes = this.maybeParseModuleAttributes();
-      if (attributes) {
-        // @ts-expect-error attributes have been deprecated
-        node.attributes = attributes;
-      }
-    }
+    this.maybeParseImportAttributes(node);
     this.checkImportReflection(node);
     this.checkJSONModuleImport(node);
 
@@ -2970,11 +3130,6 @@ export default abstract class StatementParser extends ExpressionParser {
   parseImportSource(this: Parser): N.StringLiteral {
     if (!this.match(tt.string)) this.unexpected();
     return this.parseExprAtom() as N.StringLiteral;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  shouldParseDefaultImport(node: Undone<N.ImportDeclaration>): boolean {
-    return tokenIsIdentifier(this.state.type);
   }
 
   parseImportSpecifierLocal<
@@ -2996,7 +3151,11 @@ export default abstract class StatementParser extends ExpressionParser {
       | N.ImportSpecifier
       | N.ImportDefaultSpecifier
       | N.ImportNamespaceSpecifier,
-  >(specifier: Undone<T>, type: T["type"], bindingType = BIND_LEXICAL) {
+  >(
+    specifier: Undone<T>,
+    type: T["type"],
+    bindingType: BindingTypes = BindingFlag.TYPE_LEXICAL,
+  ) {
     this.checkLVal(specifier.local, {
       in: { type },
       binding: bindingType,
@@ -3007,9 +3166,11 @@ export default abstract class StatementParser extends ExpressionParser {
   /**
    * parse assert entries
    *
-   * @see {@link https://tc39.es/proposal-import-assertions/#prod-AssertEntries AssertEntries}
+   * @see {@link https://tc39.es/proposal-import-attributes/#prod-WithEntries WithEntries}
    */
-  parseAssertEntries(): N.ImportAttribute[] {
+  parseImportAttributes(): N.ImportAttribute[] {
+    this.expect(tt.braceL);
+
     const attrs = [];
     const attrNames = new Set();
 
@@ -3048,6 +3209,8 @@ export default abstract class StatementParser extends ExpressionParser {
       attrs.push(this.finishNode(node, "ImportAttribute"));
     } while (this.eat(tt.comma));
 
+    this.expect(tt.braceR);
+
     return attrs;
   }
 
@@ -3055,18 +3218,11 @@ export default abstract class StatementParser extends ExpressionParser {
    * parse module attributes
    * @deprecated It will be removed in Babel 8
    */
-  maybeParseModuleAttributes() {
-    if (this.match(tt._with) && !this.hasPrecedingLineBreak()) {
-      this.expectPlugin("moduleAttributes");
-      this.next();
-    } else {
-      if (this.hasPlugin("moduleAttributes")) return [];
-      return null;
-    }
-    const attrs = [];
+  parseModuleAttributes() {
+    const attrs: N.ImportAttribute[] = [];
     const attributes = new Set();
     do {
-      const node = this.startNode();
+      const node = this.startNode<N.ImportAttribute>();
       node.key = this.parseIdentifier(true);
 
       if (node.key.name !== "type") {
@@ -3089,33 +3245,95 @@ export default abstract class StatementParser extends ExpressionParser {
         });
       }
       node.value = this.parseStringLiteral(this.state.value);
-      this.finishNode(node, "ImportAttribute");
-      attrs.push(node);
+      attrs.push(this.finishNode(node, "ImportAttribute"));
     } while (this.eat(tt.comma));
 
     return attrs;
   }
 
-  maybeParseImportAssertions() {
-    // [no LineTerminator here] AssertClause
-    if (this.isContextual(tt._assert) && !this.hasPrecedingLineBreak()) {
-      this.expectPlugin("importAssertions");
-      this.next(); // eat `assert`
-    } else {
-      if (this.hasPlugin("importAssertions")) return [];
-      return null;
-    }
-    // https://tc39.es/proposal-import-assertions/#prod-AssertClause
-    this.eat(tt.braceL);
-    const attrs = this.parseAssertEntries();
-    this.eat(tt.braceR);
+  maybeParseImportAttributes(
+    node: Undone<N.ImportDeclaration | N.ExportNamedDeclaration>,
+  ) {
+    let attributes: N.ImportAttribute[];
+    let useWith = false;
 
-    return attrs;
+    // https://tc39.es/proposal-import-attributes/#prod-WithClause
+    if (this.match(tt._with)) {
+      if (
+        this.hasPrecedingLineBreak() &&
+        this.lookaheadCharCode() === charCodes.leftParenthesis
+      ) {
+        // This will be parsed as a with statement, and we will throw a
+        // better error about it not being supported in strict mode.
+        return;
+      }
+
+      this.next(); // eat `with`
+
+      if (!process.env.BABEL_8_BREAKING) {
+        if (this.hasPlugin("moduleAttributes")) {
+          attributes = this.parseModuleAttributes();
+        } else {
+          this.expectImportAttributesPlugin();
+          attributes = this.parseImportAttributes();
+        }
+      } else {
+        this.expectImportAttributesPlugin();
+        attributes = this.parseImportAttributes();
+      }
+      useWith = true;
+    } else if (this.isContextual(tt._assert) && !this.hasPrecedingLineBreak()) {
+      if (this.hasPlugin("importAttributes")) {
+        if (
+          this.getPluginOption("importAttributes", "deprecatedAssertSyntax") !==
+          true
+        ) {
+          this.raise(Errors.ImportAttributesUseAssert, {
+            at: this.state.startLoc,
+          });
+        }
+        this.addExtra(node, "deprecatedAssertSyntax", true);
+      } else {
+        this.expectOnePlugin(["importAttributes", "importAssertions"]);
+      }
+      this.next(); // eat `assert`
+      attributes = this.parseImportAttributes();
+    } else if (
+      this.hasPlugin("importAttributes") ||
+      this.hasPlugin("importAssertions")
+    ) {
+      attributes = [];
+    } else if (!process.env.BABEL_8_BREAKING) {
+      if (this.hasPlugin("moduleAttributes")) {
+        attributes = [];
+      } else return;
+    } else return;
+
+    if (!useWith && this.hasPlugin("importAssertions")) {
+      node.assertions = attributes;
+    } else {
+      node.attributes = attributes;
+    }
   }
 
-  maybeParseDefaultImportSpecifier(node: Undone<N.ImportDeclaration>): boolean {
-    if (this.shouldParseDefaultImport(node)) {
-      // import defaultObj, { x, y as z } from '...'
+  maybeParseDefaultImportSpecifier(
+    node: Undone<N.ImportDeclaration>,
+    maybeDefaultIdentifier: N.Identifier | null,
+  ): boolean {
+    // import defaultObj, { x, y as z } from '...'
+    if (maybeDefaultIdentifier) {
+      const specifier = this.startNodeAtNode<N.ImportDefaultSpecifier>(
+        maybeDefaultIdentifier,
+      );
+      specifier.local = maybeDefaultIdentifier;
+      node.specifiers.push(
+        this.finishImportSpecifier(specifier, "ImportDefaultSpecifier"),
+      );
+      return true;
+    } else if (
+      // We allow keywords, and parseImportSpecifierLocal will report a recoverable error
+      tokenIsKeywordOrIdentifier(this.state.type)
+    ) {
       this.parseImportSpecifierLocal(
         node,
         this.startNode<N.ImportDefaultSpecifier>(),

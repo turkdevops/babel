@@ -1,16 +1,26 @@
 import { template, types as t } from "@babel/core";
 import type { NodePath } from "@babel/traverse";
 import assert from "assert";
+import annotateAsPure from "@babel/helper-annotate-as-pure";
 
 type t = typeof t;
 
 const ENUMS = new WeakMap<t.Identifier, PreviousEnumMembers>();
 
+const buildEnumWrapper = template.expression(
+  `
+    (function (ID) {
+      ASSIGNMENTS;
+      return ID;
+    })(INIT)
+  `,
+);
+
 export default function transpileEnum(
   path: NodePath<t.TSEnumDeclaration>,
   t: t,
 ) {
-  const { node } = path;
+  const { node, parentPath } = path;
 
   if (node.declare) {
     path.remove();
@@ -18,24 +28,41 @@ export default function transpileEnum(
   }
 
   const name = node.id.name;
-  const { wrapper: fill, data } = enumFill(path, t, node.id);
+  const { fill, data, isPure } = enumFill(path, t, node.id);
 
-  switch (path.parent.type) {
+  switch (parentPath.type) {
     case "BlockStatement":
     case "ExportNamedDeclaration":
     case "Program": {
-      path.insertAfter(fill);
-      if (seen(path.parentPath)) {
-        path.remove();
-      } else {
-        // todo: Consider exclude program with import/export
-        // && !path.parent.body.some(n => t.isImportDeclaration(n) || t.isExportDeclaration(n));
-        const isGlobal = t.isProgram(path.parent);
-        path.scope.registerDeclaration(
-          path.replaceWith(makeVar(node.id, t, isGlobal ? "var" : "let"))[0],
-        );
-        ENUMS.set(path.scope.getBindingIdentifier(name), data);
+      // todo: Consider exclude program with import/export
+      // && !path.parent.body.some(n => t.isImportDeclaration(n) || t.isExportDeclaration(n));
+      const isGlobal = t.isProgram(path.parent);
+      const isSeen = seen(parentPath);
+
+      let init: t.Expression = t.objectExpression([]);
+      if (isSeen || isGlobal) {
+        init = t.logicalExpression("||", t.cloneNode(fill.ID), init);
       }
+      const enumIIFE = buildEnumWrapper({ ...fill, INIT: init });
+      if (isPure) annotateAsPure(enumIIFE);
+
+      if (isSeen) {
+        const toReplace = parentPath.isExportDeclaration() ? parentPath : path;
+        toReplace.replaceWith(
+          t.expressionStatement(
+            t.assignmentExpression("=", t.cloneNode(node.id), enumIIFE),
+          ),
+        );
+      } else {
+        path.scope.registerDeclaration(
+          path.replaceWith(
+            t.variableDeclaration(isGlobal ? "var" : "let", [
+              t.variableDeclarator(node.id, enumIIFE),
+            ]),
+          )[0],
+        );
+      }
+      ENUMS.set(path.scope.getBindingIdentifier(name), data);
       break;
     }
 
@@ -57,16 +84,6 @@ export default function transpileEnum(
   }
 }
 
-function makeVar(id: t.Identifier, t: t, kind: "var" | "let" | "const") {
-  return t.variableDeclaration(kind, [t.variableDeclarator(id)]);
-}
-
-const buildEnumWrapper = template(`
-  (function (ID) {
-    ASSIGNMENTS;
-  })(ID || (ID = {}));
-`);
-
 const buildStringAssignment = template(`
   ENUM["NAME"] = VALUE;
 `);
@@ -83,7 +100,7 @@ const buildEnumMember = (isString: boolean, options: Record<string, unknown>) =>
  * `(function (E) { ... assignments ... })(E || (E = {}));`
  */
 function enumFill(path: NodePath<t.TSEnumDeclaration>, t: t, id: t.Identifier) {
-  const { enumValues: x, data } = translateEnumValues(path, t);
+  const { enumValues: x, data, isPure } = translateEnumValues(path, t);
   const assignments = x.map(([memberName, memberValue]) =>
     buildEnumMember(t.isStringLiteral(memberValue), {
       ENUM: t.cloneNode(id),
@@ -93,11 +110,12 @@ function enumFill(path: NodePath<t.TSEnumDeclaration>, t: t, id: t.Identifier) {
   );
 
   return {
-    wrapper: buildEnumWrapper({
+    fill: {
       ID: t.cloneNode(id),
       ASSIGNMENTS: assignments,
-    }),
-    data: data,
+    },
+    data,
+    isPure,
   };
 }
 
@@ -141,10 +159,11 @@ export function translateEnumValues(path: NodePath<t.TSEnumDeclaration>, t: t) {
   // Start at -1 so the first enum member is its increment, 0.
   let constValue: number | string | undefined = -1;
   let lastName: string;
+  let isPure = true;
 
-  return {
-    data: seen,
-    enumValues: path.get("members").map(memberPath => {
+  const enumValues: Array<[name: string, value: t.Expression]> = path
+    .get("members")
+    .map(memberPath => {
       const member = memberPath.node;
       const name = t.isIdentifier(member.id) ? member.id.name : member.id.value;
       const initializerPath = memberPath.get("initializer");
@@ -154,13 +173,24 @@ export function translateEnumValues(path: NodePath<t.TSEnumDeclaration>, t: t) {
         constValue = computeConstantValue(initializerPath, seen);
         if (constValue !== undefined) {
           seen.set(name, constValue);
-          if (typeof constValue === "number") {
-            value = t.numericLiteral(constValue);
+          assert(
+            typeof constValue === "number" || typeof constValue === "string",
+          );
+          // We do not use `t.valueToNode` because `Infinity`/`NaN` might refer
+          // to a local variable. Even 1/0
+          // Revisit once https://github.com/microsoft/TypeScript/issues/55091
+          // is fixed. Note: we will have to distinguish between actual
+          // infinities and reference  to non-infinite variables names Infinity.
+          if (constValue === Infinity || Number.isNaN(constValue)) {
+            value = t.identifier(String(constValue));
+          } else if (constValue === -Infinity) {
+            value = t.unaryExpression("-", t.identifier("Infinity"));
           } else {
-            assert(typeof constValue === "string");
-            value = t.stringLiteral(constValue);
+            value = t.valueToNode(constValue);
           }
         } else {
+          isPure &&= initializerPath.isPure();
+
           if (initializerPath.isReferencedIdentifier()) {
             ReferencedIdentifier(initializerPath, {
               t,
@@ -197,7 +227,12 @@ export function translateEnumValues(path: NodePath<t.TSEnumDeclaration>, t: t) {
 
       lastName = name;
       return [name, value];
-    }) as Array<[name: string, value: t.Expression]>,
+    });
+
+  return {
+    isPure,
+    data: seen,
+    enumValues,
   };
 }
 
@@ -274,6 +309,10 @@ function computeConstantValue(
       return data.get(prop.computed ? prop.value : prop.name);
     } else if (path.isIdentifier()) {
       const name = path.node.name;
+
+      if (["Infinity", "NaN"].includes(name)) {
+        return Number(name);
+      }
 
       let value = prevMembers?.get(name);
       if (value !== undefined) {

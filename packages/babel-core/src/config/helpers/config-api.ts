@@ -1,15 +1,15 @@
 import semver from "semver";
 import type { Targets } from "@babel/helper-compilation-targets";
 
-import { version as coreVersion } from "../../";
-import { assertSimpleType } from "../caching";
+import { version as coreVersion } from "../../index.ts";
+import { assertSimpleType } from "../caching.ts";
 import type {
   CacheConfigurator,
   SimpleCacheConfigurator,
   SimpleType,
-} from "../caching";
+} from "../caching.ts";
 
-import type { AssumptionName, CallerMetadata } from "../validation/options";
+import type { AssumptionName, CallerMetadata } from "../validation/options.ts";
 
 import type * as Context from "../cache-contexts";
 
@@ -20,9 +20,14 @@ type EnvFunction = {
   (envVars: Array<string>): boolean;
 };
 
-type CallerFactory = (
-  extractor: (callerMetadata: CallerMetadata | undefined) => unknown,
-) => SimpleType;
+type CallerFactory = {
+  <T extends SimpleType>(
+    extractor: (callerMetadata: CallerMetadata | undefined) => T,
+  ): T;
+  (
+    extractor: (callerMetadata: CallerMetadata | undefined) => unknown,
+  ): SimpleType;
+};
 type TargetsFunction = () => Targets;
 type AssumptionFunction = (name: AssumptionName) => boolean | undefined;
 

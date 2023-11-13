@@ -3,14 +3,24 @@ import { declare } from "@babel/helper-plugin-utils";
 export interface Options {
   // TODO(Babel 8): Remove
   legacy?: boolean;
-  // TODO(Babel 8): Remove "2018-09", "2021-12", and '2022-03'
-  version?: "legacy" | "2018-09" | "2021-12" | "2022-03" | "2023-01";
+  // TODO(Babel 8): Remove "2018-09", "2021-12", '2022-03', and '2023-01'
+  version?:
+    | "legacy"
+    | "2018-09"
+    | "2021-12"
+    | "2022-03"
+    | "2023-01"
+    | "2023-05";
   // TODO(Babel 8): Remove
   decoratorsBeforeExport?: boolean;
 }
 
 export default declare((api, options: Options) => {
-  api.assertVersion(7);
+  api.assertVersion(
+    process.env.BABEL_8_BREAKING && process.env.IS_PUBLISH
+      ? PACKAGE_JSON.version
+      : 7,
+  );
 
   let { version } = options;
 
@@ -18,10 +28,11 @@ export default declare((api, options: Options) => {
     if (version === undefined) {
       throw new Error(
         "The decorators plugin requires a 'version' option, whose value must be one of: " +
-          "'2023-01', '2022-03', '2021-12', '2018-09', or 'legacy'.",
+          "'2023-05', '2023-01', '2022-03', '2021-12', '2018-09', or 'legacy'.",
       );
     }
     if (
+      version !== "2023-05" &&
       version !== "2023-01" &&
       version !== "2022-03" &&
       version !== "2021-12" &&
@@ -56,12 +67,15 @@ export default declare((api, options: Options) => {
     if (version === undefined) {
       version = legacy ? "legacy" : "2018-09";
     } else if (
+      version !== "2023-05" &&
       version !== "2023-01" &&
       version !== "2022-03" &&
       version !== "2021-12" &&
       version !== "2018-09" &&
       version !== "legacy"
     ) {
+      // Fallback to print the invalid version option regardless of the type
+      // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
       throw new Error("Unsupported decorators version: " + version);
     }
 
@@ -104,7 +118,7 @@ export default declare((api, options: Options) => {
           "decoratorAutoAccessors",
         );
       } else {
-        if (version === "2023-01") {
+        if (version === "2023-01" || version === "2023-05") {
           parserOpts.plugins.push(
             ["decorators", { allowCallParenthesized: false }],
             "decoratorAutoAccessors",
